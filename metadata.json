@@ -1,0 +1,6 @@
+{
+  "name": "Previsor de Datos Móviles",
+  "description": "Predice si tu paquete de datos móviles te alcanzará para el mes completo según tu saldo restante, días y ritmo de consumo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
