@@ -1,6 +1,9 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -9,21 +12,33 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DataUsage
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,10 +50,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.domain.UssdParser
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -645,3 +662,261 @@ fun NewPrepaidPurchaseDialog(
         }
     )
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun UssdReadingDialog(
+    lineId: Int,
+    lineName: String,
+    currentUssdCode: String,
+    packageTotalMB: Double,
+    displayUnit: String,
+    onDismiss: () -> Unit,
+    onSaveUssdCode: (String) -> Unit,
+    onConfirmReading: (remainingMB: Double, note: String) -> Unit
+) {
+    val context = LocalContext.current
+    var ussdCodeText by remember(currentUssdCode) { mutableStateOf(currentUssdCode) }
+    var inputText by remember { mutableStateOf("") }
+    var manualUnit by remember(displayUnit) { mutableStateOf(displayUnit) }
+    var noteText by remember { mutableStateOf("Lectura USSD ($currentUssdCode)") }
+
+    val parsedBalance = remember(inputText, manualUnit) {
+        UssdParser.parse(inputText, manualUnit)
+    }
+
+    val popularPresets = listOf(
+        "*222*328#" to "ETECSA Datos",
+        "*222#" to "ETECSA Saldo",
+        "*133#" to "Movistar/Telcel",
+        "*103#" to "Claro",
+        "*123#" to "Vodafone"
+    )
+
+    fun dialUssd(code: String) {
+        try {
+            val encoded = Uri.encode(code)
+            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$encoded")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {}
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Dialpad,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text("Lectura por USSD", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text(lineName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Section 1: USSD Code Configuration
+                Text(
+                    text = "1. Código USSD de tu operadora",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                OutlinedTextField(
+                    value = ussdCodeText,
+                    onValueChange = {
+                        ussdCodeText = it
+                        onSaveUssdCode(it)
+                        noteText = "Lectura USSD ($it)"
+                    },
+                    label = { Text("Código USSD") },
+                    placeholder = { Text("Ej. *222*328#") },
+                    leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("ussd_code_input")
+                )
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    popularPresets.forEach { (code, label) ->
+                        FilterChip(
+                            selected = ussdCodeText == code,
+                            onClick = {
+                                ussdCodeText = code
+                                onSaveUssdCode(code)
+                                noteText = "Lectura USSD ($code)"
+                            },
+                            label = { Text("$code ($label)", style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
+                // Section 2: Launch Dialer Action
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Abre el marcador para consultar a tu operador:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { dialUssd(ussdCodeText) },
+                            modifier = Modifier.fillMaxWidth().testTag("launch_ussd_dial_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Marcar $ussdCodeText")
+                        }
+                    }
+                }
+
+                // Section 3: Capture and parse response
+                Text(
+                    text = "2. Captura del saldo devuelto",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Text(
+                    text = "Pega aquí el mensaje emergente de la operadora o escribe directamente tus megas/gigas:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    label = { Text("Respuesta del operador o saldo") },
+                    placeholder = { Text("Ej. 'Le quedan 4.25 GB' o '3500 MB'") },
+                    leadingIcon = { Icon(Icons.Default.ContentPaste, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().testTag("ussd_response_input"),
+                    minLines = 2,
+                    maxLines = 4
+                )
+
+                // Parsed balance indicator
+                if (parsedBalance != null) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Saldo detectado con éxito:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = DataFormatters.format(parsedBalance.valueMB, displayUnit),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                } else if (inputText.isNotBlank()) {
+                    Text(
+                        text = "Introduce una cifra válida (ej. 3.5 o '4.2 GB')",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
+                // Manual unit selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = manualUnit == "GB",
+                        onClick = { manualUnit = "GB" },
+                        label = { Text("Unidad: Gigabytes (GB)") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = manualUnit == "MB",
+                        onClick = { manualUnit = "MB" },
+                        label = { Text("Megabytes (MB)") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = noteText,
+                    onValueChange = { noteText = it },
+                    label = { Text("Nota de la lectura") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    parsedBalance?.let {
+                        val safeMB = it.valueMB.coerceIn(0.0, packageTotalMB)
+                        onConfirmReading(safeMB, noteText.ifBlank { "Lectura USSD ($ussdCodeText)" })
+                        onDismiss()
+                    }
+                },
+                enabled = parsedBalance != null && parsedBalance.valueMB >= 0.0,
+                modifier = Modifier.testTag("apply_ussd_reading_button")
+            ) {
+                Text("Guardar Lectura")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+

@@ -279,6 +279,23 @@ class DataForecastViewModel(
         }
     }
 
+    fun updateUssdCode(lineId: Int, ussdCode: String) {
+        viewModelScope.launch {
+            val current = repository.getDataPlan(lineId).firstOrNull() ?: return@launch
+            repository.saveOrUpdatePlan(current.copy(ussdCode = ussdCode.trim()))
+        }
+    }
+
+    fun recordUssdReading(lineId: Int, remainingMB: Double, note: String = "Lectura por USSD") {
+        viewModelScope.launch {
+            val current = repository.getDataPlan(lineId).firstOrNull() ?: return@launch
+            val safeMB = remainingMB.coerceIn(0.0, current.packageTotalMB)
+            val day = current.customCurrentDay ?: realDay
+            repository.saveOrUpdatePlan(current.copy(remainingBalanceMB = safeMB))
+            repository.addLog(lineId, safeMB, day, note)
+        }
+    }
+
     fun deleteLog(id: Long) {
         viewModelScope.launch {
             repository.deleteLog(id)

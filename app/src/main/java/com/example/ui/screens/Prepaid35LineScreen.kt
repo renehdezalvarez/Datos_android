@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.NetworkCheck
@@ -61,6 +62,7 @@ fun Prepaid35LineScreen(
     onOpenConfigurePackage: () -> Unit,
     onOpenAdjustDays: () -> Unit,
     onOpenNewPurchaseDialog: () -> Unit,
+    onOpenUssdReading: () -> Unit,
     onToggleDisplayUnit: () -> Unit,
     onSimulateDailyMB: (Double?) -> Unit,
     modifier: Modifier = Modifier
@@ -97,6 +99,17 @@ fun Prepaid35LineScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = onOpenUssdReading,
+                        modifier = Modifier.testTag("prepaid_top_ussd_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Dialpad,
+                            contentDescription = "Lectura por USSD",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     FilledTonalButton(
                         onClick = onToggleDisplayUnit,
                         shape = RoundedCornerShape(10.dp),
@@ -363,32 +376,46 @@ fun Prepaid35LineScreen(
 
             // Quick Actions Row
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
-                        onClick = onOpenUpdateBalance,
+                        onClick = onOpenUssdReading,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("prepaid_action_update_balance")
+                            .fillMaxWidth()
+                            .testTag("prepaid_action_ussd_reading")
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Actualizar Saldo")
+                        Icon(Icons.Default.Dialpad, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Consultar Saldo por USSD (${plan.ussdCode})")
                     }
 
-                    FilledTonalButton(
-                        onClick = onOpenConfigurePackage,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("prepaid_action_change_package")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Cambiar Paquete")
+                        OutlinedButton(
+                            onClick = onOpenUpdateBalance,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("prepaid_action_update_balance")
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Anotar Saldo")
+                        }
+
+                        FilledTonalButton(
+                            onClick = onOpenConfigurePackage,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("prepaid_action_change_package")
+                        ) {
+                            Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Cambiar Paquete")
+                        }
                     }
                 }
             }

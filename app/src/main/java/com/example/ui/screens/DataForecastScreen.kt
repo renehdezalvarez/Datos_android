@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DataUsage
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.ReceiptLong
@@ -57,6 +58,7 @@ fun DataForecastScreen(
     onOpenUpdateBalance: () -> Unit,
     onOpenConfigurePackage: () -> Unit,
     onOpenAdjustDays: () -> Unit,
+    onOpenUssdReading: () -> Unit,
     onToggleDisplayUnit: () -> Unit,
     onSimulateDailyMB: (Double?) -> Unit,
     modifier: Modifier = Modifier
@@ -84,6 +86,17 @@ fun DataForecastScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = onOpenUssdReading,
+                        modifier = Modifier.testTag("action_top_ussd_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Dialpad,
+                            contentDescription = "Lectura por USSD",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     FilledTonalButton(
                         onClick = onToggleDisplayUnit,
                         shape = RoundedCornerShape(10.dp),
@@ -304,32 +317,46 @@ fun DataForecastScreen(
 
             // Quick Actions
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
-                        onClick = onOpenUpdateBalance,
+                        onClick = onOpenUssdReading,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("action_update_balance")
+                            .fillMaxWidth()
+                            .testTag("action_ussd_reading")
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Actualizar Saldo")
+                        Icon(Icons.Default.Dialpad, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Consultar Saldo por USSD (${plan.ussdCode})")
                     }
 
-                    FilledTonalButton(
-                        onClick = onOpenConfigurePackage,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("action_change_package")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Cambiar Paquete")
+                        OutlinedButton(
+                            onClick = onOpenUpdateBalance,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("action_update_balance")
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Anotar Saldo")
+                        }
+
+                        FilledTonalButton(
+                            onClick = onOpenConfigurePackage,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("action_change_package")
+                        ) {
+                            Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Cambiar Paquete")
+                        }
                     }
                 }
             }

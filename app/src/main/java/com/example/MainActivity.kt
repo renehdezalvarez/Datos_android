@@ -40,6 +40,7 @@ import com.example.ui.components.AdjustCycleDaysDialog
 import com.example.ui.components.ConfigurePackageDialog
 import com.example.ui.components.NewPrepaidPurchaseDialog
 import com.example.ui.components.UpdateBalanceDialog
+import com.example.ui.components.UssdReadingDialog
 import com.example.ui.screens.DataForecastScreen
 import com.example.ui.screens.DataLogsScreen
 import com.example.ui.screens.DataSettingsScreen
@@ -77,6 +78,7 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
     var showAdjustDaysDialog by remember { mutableStateOf(false) }
     var showAddLogDialog by remember { mutableStateOf(false) }
     var showNewPurchaseDialog by remember { mutableStateOf(false) }
+    var showUssdReadingDialog by remember { mutableStateOf(false) }
 
     if (selectedTab != 0) {
         BackHandler {
@@ -174,6 +176,10 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                         targetLineId = 1
                         showAdjustDaysDialog = true
                     },
+                    onOpenUssdReading = {
+                        targetLineId = 1
+                        showUssdReadingDialog = true
+                    },
                     onToggleDisplayUnit = { viewModel.toggleDisplayUnit(1) },
                     onSimulateDailyMB = { viewModel.setSimulatedDailyMB(1, it) }
                 )
@@ -195,6 +201,10 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                         targetLineId = 2
                         showNewPurchaseDialog = true
                     },
+                    onOpenUssdReading = {
+                        targetLineId = 2
+                        showUssdReadingDialog = true
+                    },
                     onToggleDisplayUnit = { viewModel.toggleDisplayUnit(2) },
                     onSimulateDailyMB = { viewModel.setSimulatedDailyMB(2, it) }
                 )
@@ -211,6 +221,10 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                     onOpenConfigurePackage = { lineId ->
                         targetLineId = lineId
                         showConfigurePackageDialog = true
+                    },
+                    onOpenUssdReading = { lineId ->
+                        targetLineId = lineId
+                        showUssdReadingDialog = true
                     },
                     onToggleUnit = { lineId -> viewModel.toggleDisplayUnit(lineId) },
                     onResetToCalendar = { lineId -> viewModel.resetToRealCalendar(lineId) }
@@ -284,6 +298,24 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 onConfirm = { lineId, mb, day, note ->
                     viewModel.addManualLog(lineId, mb, day, note)
                     showAddLogDialog = false
+                }
+            )
+        }
+
+        if (showUssdReadingDialog) {
+            UssdReadingDialog(
+                lineId = targetLineId,
+                lineName = if (targetLineId == 1) "Línea 1 (Mensual)" else "Línea 2 (Prepago 35d)",
+                currentUssdCode = currentDialogLine.plan.ussdCode,
+                packageTotalMB = currentDialogLine.plan.packageTotalMB,
+                displayUnit = currentDialogLine.displayUnit,
+                onDismiss = { showUssdReadingDialog = false },
+                onSaveUssdCode = { code ->
+                    viewModel.updateUssdCode(targetLineId, code)
+                },
+                onConfirmReading = { remainingMB, note ->
+                    viewModel.recordUssdReading(targetLineId, remainingMB, note)
+                    showUssdReadingDialog = false
                 }
             )
         }

@@ -131,4 +131,30 @@ class DataForecastCalculatorTest {
         // Exhaustion cycle day: 7 + 19 = 26
         assertEquals(26, result.exhaustionCycleDay)
     }
+
+    @Test
+    fun testUssdParser_extractsFromCarrierMessages() {
+        // ETECSA style message with GB
+        val msg1 = "ETECSA: Datos activos. Le quedan 4.25 GB validos hasta el 15/12/2026."
+        val p1 = com.example.domain.UssdParser.parse(msg1)
+        assertNotNull(p1)
+        assertEquals(4.25 * 1024.0, p1!!.valueMB, 0.001)
+        assertEquals("GB", p1.detectedUnit)
+
+        // Message with MB and comma decimal
+        val msg2 = "Saldo de datos restantes: 3500 MB."
+        val p2 = com.example.domain.UssdParser.parse(msg2)
+        assertNotNull(p2)
+        assertEquals(3500.0, p2!!.valueMB, 0.001)
+        assertEquals("MB", p2.detectedUnit)
+
+        // Direct number input with default unit
+        val p3 = com.example.domain.UssdParser.parse("2.5", defaultUnit = "GB")
+        assertNotNull(p3)
+        assertEquals(2.5 * 1024.0, p3!!.valueMB, 0.001)
+
+        val p4 = com.example.domain.UssdParser.parse("800", defaultUnit = "MB")
+        assertNotNull(p4)
+        assertEquals(800.0, p4!!.valueMB, 0.001)
+    }
 }

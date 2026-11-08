@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.NetworkCell
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SimCard
@@ -45,6 +46,7 @@ import com.example.ui.viewmodel.DataForecastUiState
 fun DataSettingsScreen(
     state: DataForecastUiState,
     onOpenConfigurePackage: (lineId: Int) -> Unit,
+    onOpenUssdReading: (lineId: Int) -> Unit,
     onToggleUnit: (lineId: Int) -> Unit,
     onResetToCalendar: (lineId: Int) -> Unit,
     modifier: Modifier = Modifier
@@ -148,6 +150,29 @@ fun DataSettingsScreen(
                                 label = { Text("MB") }
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Código USSD: ${state.line1.plan.ussdCode}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(
+                                onClick = { onOpenUssdReading(1) },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Dialpad, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Lectura USSD")
+                            }
+                        }
                     }
                 }
             }
@@ -225,6 +250,29 @@ fun DataSettingsScreen(
                                 onClick = { if (state.line2.displayUnit != "MB") onToggleUnit(2) },
                                 label = { Text("MB") }
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Código USSD: ${state.line2.plan.ussdCode}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(
+                                onClick = { onOpenUssdReading(2) },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Dialpad, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Lectura USSD")
+                            }
                         }
                     }
                 }

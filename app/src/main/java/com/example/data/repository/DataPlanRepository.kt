@@ -48,7 +48,8 @@ class DataPlanRepository(private val dao: DataDao) {
             operatorName = "Línea 1 (Mensual)",
             planName = "Plan Mensual 10 GB",
             planType = "MONTHLY",
-            purchaseTimestamp = System.currentTimeMillis() - (currentDay.toLong() * 24L * 60L * 60L * 1000L)
+            purchaseTimestamp = System.currentTimeMillis() - (currentDay.toLong() * 24L * 60L * 60L * 1000L),
+            ussdCode = "*222#"
         )
         dao.saveOrUpdateDataPlan(line1)
 
@@ -66,7 +67,8 @@ class DataPlanRepository(private val dao: DataDao) {
             operatorName = "Línea 2 (Prepago)",
             planName = "Paquete Prepago 35 Días",
             planType = "PREPAID_35",
-            purchaseTimestamp = eightDaysAgo
+            purchaseTimestamp = eightDaysAgo,
+            ussdCode = "*222*328#"
         )
         dao.saveOrUpdateDataPlan(line2)
 
