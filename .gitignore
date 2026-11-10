@@ -15,4 +15,11 @@
 .cxx
 local.properties
 .env
+.env.example
 debug.keystore
+
+# Compiled binaries and signing keys must never be committed;
+# distribute APKs/AABs through GitHub Releases instead.
+*.apk
+*.aab
+*.jks
