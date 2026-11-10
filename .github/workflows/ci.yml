@@ -24,6 +24,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Validates the wrapper and caches Gradle dependencies + build caches
+      # between runs, so each run no longer re-downloads everything.
+      - name: Set up Gradle with caching
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Accept Android SDK licenses
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
@@ -38,11 +43,10 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
-
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      # Single Gradle invocation: tests and APK share one daemon start,
+      # one configuration phase and the compiled classes.
+      - name: Run unit tests and build debug APK
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
