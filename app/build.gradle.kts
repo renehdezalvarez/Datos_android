@@ -70,12 +70,6 @@ android {
   }
 }
 
-// Configure KSP to export Room schemas so future database migrations
-// can be written and tested against them.
-ksp {
-  arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)

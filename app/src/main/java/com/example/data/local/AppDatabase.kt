@@ -15,7 +15,10 @@ import com.example.data.model.DataPlanEntity
         DataBalanceLogEntity::class
     ],
     version = 5,
-    exportSchema = true
+    // Schemas are not exported: keeping app/schemas in sync from CI builds
+    // is not worth it for this project. New installs get v5 directly and
+    // existing ones migrate 4 -> 5 below.
+    exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
