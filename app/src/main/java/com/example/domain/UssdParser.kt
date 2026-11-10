@@ -1,5 +1,9 @@
 package com.example.domain
 
+/**
+ * Single entry point for parsing mobile data quantities from USSD responses,
+ * SMS texts or manual user input.
+ */
 object UssdParser {
 
     data class ParsedBalance(
@@ -9,18 +13,20 @@ object UssdParser {
         val matchedText: String
     )
 
+    // Number followed by a data unit: GB, MB, Giga(s), Mega(s), GiB, MiB.
+    private val quantityPattern = Regex("""(?i)(\d+(?:[.,]\d+)?)\s*(GIB|GB|GIGAS?|MIB|MB|MEGAS?)\b""")
+
     /**
      * Extracts mobile data balance in MB from either a raw number (e.g. "3.5")
      * or a carrier USSD response string (e.g. "Su saldo de datos es de 4.25 GB válidos hasta...",
      * "Paquete activo: le quedan 3500 MB").
+     * Falls back to interpreting the whole text as a number expressed in [defaultUnit].
      */
     fun parse(text: String, defaultUnit: String = "GB"): ParsedBalance? {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return null
 
-        // Pattern: looks for number followed by GB, MB, Giga, Mega, etc.
-        val regex = Regex("""(?i)(\d+(?:[.,]\d+)?)\s*(GB|MB|GIGAS?|MEGAS?)\b""")
-        val match = regex.find(trimmed)
+        val match = quantityPattern.find(trimmed)
         if (match != null) {
             val numStr = match.groupValues[1].replace(',', '.')
             val rawUnit = match.groupValues[2].uppercase()
@@ -46,6 +52,35 @@ object UssdParser {
                 detectedUnit = if (isGb) "GB" else "MB",
                 matchedText = "$directNum $defaultUnit"
             )
+        }
+
+        return null
+    }
+
+    /**
+     * Parses a text message from a USSD response or SMS to detect data quantities
+     * (GB or MB). Returns extracted Megabytes or null if no valid balance is detected.
+     * When both units appear in the text, GB quantities take precedence (they usually
+     * carry the headline balance in carrier messages).
+     */
+    fun parseDataBalanceMB(text: String): Double? {
+        if (text.isBlank()) return null
+
+        val normalized = text.replace(',', '.')
+        val gbMatch = Regex("""(?i)(\d+(?:\.\d+)?)\s*(?:GB|GIGAS?|GIB)\b""").find(normalized)
+        if (gbMatch != null) {
+            val num = gbMatch.groupValues[1].toDoubleOrNull()
+            if (num != null && num > 0.0) {
+                return num * 1024.0
+            }
+        }
+
+        val mbMatch = Regex("""(?i)(\d+(?:\.\d+)?)\s*(?:MB|MEGAS?|MIB)\b""").find(normalized)
+        if (mbMatch != null) {
+            val num = mbMatch.groupValues[1].toDoubleOrNull()
+            if (num != null && num > 0.0) {
+                return num
+            }
         }
 
         return null

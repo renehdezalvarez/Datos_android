@@ -46,7 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.domain.UssdResponseParser
+import com.example.domain.UssdParser
 import com.example.ui.theme.StatusSuccess
 
 @Composable
@@ -168,7 +168,7 @@ fun UssdConsultDialog(
                     value = responseText,
                     onValueChange = {
                         responseText = it
-                        val mb = UssdResponseParser.parseDataBalanceMB(it)
+                        val mb = UssdParser.parseDataBalanceMB(it)
                         if (mb != null) {
                             detectedMB = mb
                             detectedResult = "Detectado: ${DataFormatters.format(mb, "auto")}"
@@ -196,7 +196,7 @@ fun UssdConsultDialog(
                             val clip = clipboardManager.getText()?.text
                             if (!clip.isNullOrBlank()) {
                                 responseText = clip
-                                val mb = UssdResponseParser.parseDataBalanceMB(clip)
+                                val mb = UssdParser.parseDataBalanceMB(clip)
                                 if (mb != null) {
                                     detectedMB = mb
                                     detectedResult = "Detectado: ${DataFormatters.format(mb, "auto")}"
@@ -217,7 +217,7 @@ fun UssdConsultDialog(
 
                     FilledTonalButton(
                         onClick = {
-                            val mb = UssdResponseParser.parseDataBalanceMB(responseText)
+                            val mb = UssdParser.parseDataBalanceMB(responseText)
                             if (mb != null) {
                                 detectedMB = mb
                                 detectedResult = "Detectado: ${DataFormatters.format(mb, "auto")}"
