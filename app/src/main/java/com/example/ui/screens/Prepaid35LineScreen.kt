@@ -184,8 +184,9 @@ fun Prepaid35LineScreen(
                                 )
                                 Text(
                                     text = when {
-                                        daysLeft <= 0 -> "Compra un nuevo paquete para recuperar tus datos."
-                                        else -> "Compra un nuevo paquete antes de que venza para no quedarte sin datos."
+                                        daysLeft <= 0 -> "El saldo restante se perdió. Compra un nuevo paquete para recuperar tus datos."
+                                        daysLeft == 1 -> "Último día: al terminar hoy el saldo restante se pierde. Compra para conservarlo."
+                                        else -> "El día ${forecast.totalCycleDays} es la fecha límite: el saldo que quede al vencer se pierde. Compra antes para conservarlo."
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer

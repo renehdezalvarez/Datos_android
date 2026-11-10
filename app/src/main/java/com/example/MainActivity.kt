@@ -260,6 +260,7 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 currentPackageTotalMB = state.line2.plan.packageTotalMB,
                 currentRemainingMB = state.line2.plan.remainingBalanceMB,
                 displayUnit = state.line2.displayUnit,
+                previousBalanceLost = state.line2.forecast.daysRemaining <= 0,
                 onDismiss = { showNewPurchaseDialog = false },
                 onConfirm = { packageMB, totalDays, purchaseDateMillis ->
                     viewModel.registerNewPrepaidPurchase(2, packageMB, totalDays, purchaseDateMillis)

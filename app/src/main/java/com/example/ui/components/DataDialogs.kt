@@ -461,6 +461,7 @@ fun NewPrepaidPurchaseDialog(
     currentPackageTotalMB: Double,
     currentRemainingMB: Double,
     displayUnit: String,
+    previousBalanceLost: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (packageMB: Double, totalDays: Int, purchaseDateMillis: Long?) -> Unit
 ) {
@@ -514,7 +515,9 @@ fun NewPrepaidPurchaseDialog(
     }
 
     val purchaseGB = sizeGBText.toDoubleOrNull() ?: 0.0
-    val resultingMB = currentRemainingMB + purchaseGB * 1024.0
+    // After the deadline (day 35) the leftover balance is forfeited, so the
+    // new package starts from zero instead of adding on top of it.
+    val resultingMB = if (previousBalanceLost) purchaseGB * 1024.0 else currentRemainingMB + purchaseGB * 1024.0
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -528,7 +531,11 @@ fun NewPrepaidPurchaseDialog(
         text = {
             Column {
                 Text(
-                    text = "Registra la compra de un nuevo paquete. La capacidad comprada se SUMA al saldo restante actual y el ciclo se reinicia desde la fecha de compra:",
+                    text = if (previousBalanceLost) {
+                        "El paquete anterior venció y su saldo restante se perdió. Registra la compra del nuevo paquete, que arranca desde cero:"
+                    } else {
+                        "Registra la compra de un nuevo paquete. La capacidad comprada se SUMA al saldo restante actual y el ciclo se reinicia desde la fecha de compra:"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -600,11 +607,19 @@ fun NewPrepaidPurchaseDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            Text(
-                                text = "Saldo actual: ${DataFormatters.format(currentRemainingMB, displayUnit)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            if (previousBalanceLost) {
+                                Text(
+                                    text = "Saldo anterior: ${DataFormatters.format(currentRemainingMB, displayUnit)} (perdido al vencer)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            } else {
+                                Text(
+                                    text = "Saldo actual: ${DataFormatters.format(currentRemainingMB, displayUnit)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                             Text(
                                 text = "+ Paquete comprado: ${DataFormatters.format(purchaseGB * 1024.0, displayUnit)}",
                                 style = MaterialTheme.typography.labelSmall,

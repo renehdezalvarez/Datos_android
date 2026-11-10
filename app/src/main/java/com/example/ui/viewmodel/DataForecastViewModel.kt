@@ -307,8 +307,16 @@ class DataForecastViewModel(
         purchaseDateMillis: Long? = null
     ) {
         viewModelScope.launch {
+            // Sensible empty state for a prepaid line: nothing accumulated
+            // yet, so a first purchase starts from a clean slate.
             val current = repository.getDataPlan(lineId).firstOrNull()
-                ?: DataPlanEntity(id = lineId, planType = PREPAID_PLAN_TYPE)
+                ?: DataPlanEntity(
+                    id = lineId,
+                    planType = PREPAID_PLAN_TYPE,
+                    packageTotalMB = 0.0,
+                    remainingBalanceMB = 0.0,
+                    totalCycleDays = totalDays
+                )
             val safePackage = packageTotalMB.coerceAtLeast(100.0)
 
             // The purchase date defaults to today; when a past date is given,
@@ -317,25 +325,42 @@ class DataForecastViewModel(
             val daysSincePurchase = ((System.currentTimeMillis() - purchaseTs) / DAY_MS).toInt().coerceAtLeast(0)
             val cycleDay = (daysSincePurchase + 1).coerceIn(1, totalDays)
 
+            // Day 35 is the deadline: if the old cycle already ran out, the
+            // leftover balance was forfeited and the new cycle starts fresh.
+            val oldCycleDay = ((System.currentTimeMillis() - current.purchaseTimestamp) / DAY_MS).toInt() + 1
+            val previousExpired = current.totalCycleDays > 0 && oldCycleDay > current.totalCycleDays
+
             _customTotalDaysLine2.value = totalDays
 
-            // The purchased capacity is ADDED to whatever balance was left,
-            // and the package total grows by the same amount so the
-            // consumption history stays coherent.
-            val updated = current.copy(
-                packageTotalMB = current.packageTotalMB + safePackage,
-                remainingBalanceMB = current.remainingBalanceMB + safePackage,
-                totalCycleDays = totalDays,
-                customCurrentDay = cycleDay,
-                purchaseTimestamp = purchaseTs,
-                planName = "Paquete ${DataFormatters.format(current.packageTotalMB + safePackage, current.displayUnit)} ($totalDays días)"
-            )
+            val updated = if (previousExpired) {
+                current.copy(
+                    packageTotalMB = safePackage,
+                    remainingBalanceMB = safePackage,
+                    totalCycleDays = totalDays,
+                    customCurrentDay = cycleDay,
+                    purchaseTimestamp = purchaseTs,
+                    planName = "Paquete ${DataFormatters.format(safePackage, current.displayUnit)} ($totalDays días)"
+                )
+            } else {
+                // The purchased capacity is ADDED to whatever balance was
+                // left, and the package total grows by the same amount so
+                // the consumption history stays coherent.
+                current.copy(
+                    packageTotalMB = current.packageTotalMB + safePackage,
+                    remainingBalanceMB = current.remainingBalanceMB + safePackage,
+                    totalCycleDays = totalDays,
+                    customCurrentDay = cycleDay,
+                    purchaseTimestamp = purchaseTs,
+                    planName = "Paquete ${DataFormatters.format(current.packageTotalMB + safePackage, current.displayUnit)} ($totalDays días)"
+                )
+            }
             repository.saveOrUpdatePlan(updated)
             repository.addLog(
                 lineId,
                 updated.remainingBalanceMB,
                 cycleDay,
                 "Compra nuevo paquete: ${DataFormatters.format(safePackage, current.displayUnit)}" +
+                    (if (previousExpired) " (el paquete anterior venció: el saldo restante se perdió)" else "") +
                     (if (purchaseDateMillis != null) " (comprado el ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(purchaseDateMillis))})" else "")
             )
         }
