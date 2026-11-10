@@ -78,7 +78,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Cubren el motor de pronóstico (`DataForecastCalculator`) y el parser USSD
-(`UssdParser`) con Robolectric/JUnit.
+(`UssdParser`) con JUnit.
 
 ## 📦 Descargas
 
