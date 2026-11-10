@@ -12,8 +12,8 @@ android {
     applicationId = "com.aistudio.previsiongastos.pkwqzl"
     minSdk = 24
     targetSdk = 36
-    versionCode = 10
-    versionName = "8.2"
+    versionCode = 11
+    versionName = "8.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -22,8 +22,12 @@ android {
   // and updating Android apps in AI Studio.
   signingConfigs {
     create("release") {
+      // Stable upload key: supplied via KEYSTORE_PATH / STORE_PASSWORD / KEY_PASSWORD
+      // (CI injects them from GitHub secrets). Using the same key on every build lets
+      // new versions install on top of older ones instead of requiring a uninstall.
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
+      storeType = "PKCS12"
       storePassword = System.getenv("STORE_PASSWORD")
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")

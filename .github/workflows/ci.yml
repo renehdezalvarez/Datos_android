@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    name: Unit tests & debug APK
+    name: Unit tests & signed APK
     runs-on: ubuntu-latest
 
     steps:
@@ -33,26 +33,24 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
-      # The debug build type signs with <rootDir>/debug.keystore (gitignored),
-      # so CI generates an equivalent throwaway keystore.
-      - name: Generate debug keystore
+      # Decode the stable upload key from secrets. Every build is signed with
+      # the same key, so new versions update over installed ones without
+      # requiring an uninstall.
+      - name: Decode signing key
         run: |
-          keytool -genkeypair -v \
-            -keystore debug.keystore \
-            -storepass android -alias androiddebugkey -keypass android \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+          echo "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload-key.p12"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/upload-key.p12" >> "$GITHUB_ENV"
+          echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
 
-      # Single Gradle invocation: tests and APK share one daemon start,
-      # one configuration phase and the compiled classes.
-      - name: Run unit tests and build debug APK
-        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Run unit tests and build signed APK
+        run: ./gradlew testDebugUnitTest assembleRelease --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: app-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
           retention-days: 14
 
       # Tag pushes (v*) publish a GitHub Release with the APK attached,
@@ -63,7 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          cp app/build/outputs/apk/debug/app-debug.apk "PrevisorDatos_${VERSION}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "PrevisorDatos_${VERSION}.apk"
           sha256sum "PrevisorDatos_${VERSION}.apk"
           gh release create "$GITHUB_REF_NAME" "PrevisorDatos_${VERSION}.apk" \
             --title "$GITHUB_REF_NAME – Previsor de Datos Móviles" \

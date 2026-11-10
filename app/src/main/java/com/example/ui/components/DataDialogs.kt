@@ -723,14 +723,6 @@ fun UssdReadingDialog(
     val dialogOpenMs = remember { System.currentTimeMillis() }
     val latestAutoReading = autoReading?.takeIf { it.lineId == lineId && it.id >= dialogOpenMs }
 
-    val popularPresets = listOf(
-        "*222*328#" to "ETECSA Datos",
-        "*222#" to "ETECSA Saldo",
-        "*133#" to "Movistar/Telcel",
-        "*103#" to "Claro",
-        "*123#" to "Vodafone"
-    )
-
     fun dialUssd(code: String, directCall: Boolean) {
         try {
             val encoded = Uri.encode(code)
@@ -812,28 +804,11 @@ fun UssdReadingDialog(
                         noteText = "Lectura USSD ($it)"
                     },
                     label = { Text("Código USSD") },
-                    placeholder = { Text("Ej. *222*328#") },
+                    placeholder = { Text("Ej. *111#") },
                     leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("ussd_code_input")
                 )
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    popularPresets.forEach { (code, label) ->
-                        FilterChip(
-                            selected = ussdCodeText == code,
-                            onClick = {
-                                ussdCodeText = code
-                                onSaveUssdCode(code)
-                                noteText = "Lectura USSD ($code)"
-                            },
-                            label = { Text("$code ($label)", style = MaterialTheme.typography.labelSmall) }
-                        )
-                    }
-                }
 
                 // Section 2: Automatic dialing + reading
                 Text(

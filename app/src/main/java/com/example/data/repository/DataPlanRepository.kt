@@ -52,7 +52,7 @@ class DataPlanRepository(private val dao: DataDao) {
                 planName = "Plan Mensual 10 GB",
                 planType = "MONTHLY",
                 purchaseTimestamp = System.currentTimeMillis(),
-                ussdCode = "*222#"
+                ussdCode = "*111#"
             )
             dao.saveOrUpdateDataPlan(line1)
         }

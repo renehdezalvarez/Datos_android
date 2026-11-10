@@ -17,7 +17,7 @@ data class DataPlanEntity(
     val planName: String = "Paquete 10 GB",
     val planType: String = "MONTHLY", // "MONTHLY" or "PREPAID_35"
     val purchaseTimestamp: Long = System.currentTimeMillis(),
-    val ussdCode: String = "*222#"
+    val ussdCode: String = "*111#"
 )
 
 @Entity(tableName = "data_balance_logs")
