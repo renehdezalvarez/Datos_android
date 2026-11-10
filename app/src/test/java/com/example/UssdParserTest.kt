@@ -101,6 +101,20 @@ class UssdParserTest {
     }
 
     @Test
+    fun testParseDaysRemaining_validosPhrasing() {
+        // Real carrier wording: "validos 14 dias" (today included)
+        assertEquals(14, UssdParser.parseDaysRemaining("Datos: 2048 MB validos 14 dias"))
+        assertEquals(14, UssdParser.parseDaysRemaining("VALIDOS 14 DIAS"))
+        assertEquals(14, UssdParser.parseDaysRemaining("validos 14 dias"))
+        assertEquals(14, UssdParser.parseDaysRemaining("bono valido por 14 dias"))
+        assertEquals(14, UssdParser.parseDaysRemaining("14 dias validos"))
+        assertEquals(1, UssdParser.parseDaysRemaining("datos validos 1 dia"))
+        // "validos hasta <date>" must still fall through to the date branch
+        val now = dateOf(2026, Calendar.NOVEMBER, 10)
+        assertEquals(16, UssdParser.parseDaysRemaining("2.5 GB válidos hasta 25/11", now))
+    }
+
+    @Test
     fun testParseDaysRemaining_prefersRemainingOverTotal() {
         // "paquete DE 35 días" (total) + "quedan 20 días" (remaining) -> 20
         assertEquals(20, UssdParser.parseDaysRemaining("Paquete de 35 días, le quedan 20 días"))

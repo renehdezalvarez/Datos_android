@@ -160,7 +160,11 @@ fun DataForecastScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "${forecast.daysRemaining} días restantes para renovación",
+                                    text = if (forecast.daysRemaining == 1) {
+                                        "1 día restante para renovación"
+                                    } else {
+                                        "${forecast.daysRemaining} días restantes para renovación"
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

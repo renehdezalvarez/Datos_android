@@ -57,19 +57,28 @@ object DataForecastCalculator {
         simulatedDailyMB: Double? = null
     ): DataForecastResult {
         val safeTotalDays = max(1, totalCycleDays)
-        val safeElapsed = min(max(1, daysElapsed), safeTotalDays)
-        val safeRemainingDays = max(0, safeTotalDays - safeElapsed)
+        // Raw elapsed may exceed the cycle length when a prepaid package is
+        // already expired. The UI shows the clamped cycle day, but the
+        // remaining-days countdown must be able to reach zero (and go
+        // negative) so "Vencido" can surface.
+        val rawElapsed = max(1, daysElapsed)
+        val displayElapsed = min(rawElapsed, safeTotalDays)
+        // Operator semantics: today counts as a remaining day ("validos 14
+        // dias" -> day 22 of a 35-day cycle must show 14 days left).
+        val daysRemaining = safeTotalDays - rawElapsed + 1
+        // Full days strictly after today, used for rates and projections.
+        val futureDays = max(0, daysRemaining - 1)
 
         val safePackageMB = max(100.0, packageTotalMB)
         val safeRemainingMB = min(safePackageMB, max(0.0, remainingBalanceMB))
         val consumedMB = max(0.0, safePackageMB - safeRemainingMB)
 
         // Consumo diario promedio actual
-        val dailyBurnRateMB = if (safeElapsed > 0) consumedMB / safeElapsed else 0.0
+        val dailyBurnRateMB = if (displayElapsed > 0) consumedMB / displayElapsed else 0.0
 
         // Cuota diaria segura para que alcance exactamente los días restantes
-        val safeDailyAllowanceMB = if (safeRemainingDays > 0) {
-            safeRemainingMB / safeRemainingDays
+        val safeDailyAllowanceMB = if (futureDays > 0) {
+            safeRemainingMB / futureDays
         } else {
             safeRemainingMB
         }
@@ -84,37 +93,37 @@ object DataForecastCalculator {
         }
 
         // ¿Alcanzará para el mes completo?
-        val willLastWholeMonth = daysOfDataLeft >= safeRemainingDays
+        val willLastWholeMonth = daysOfDataLeft >= futureDays
 
         // Proyección de saldo a fin de mes
-        val projectedRemainingSpendMB = dailyBurnRateMB * safeRemainingDays
+        val projectedRemainingSpendMB = dailyBurnRateMB * futureDays
         val projectedDeficitOrSurplusMB = safeRemainingMB - projectedRemainingSpendMB
 
         // Día del ciclo en que se agotará
         val exhaustionCycleDay = if (willLastWholeMonth) {
             null
         } else {
-            val day = safeElapsed + floor(daysOfDataLeft).toInt()
+            val day = displayElapsed + floor(daysOfDataLeft).toInt()
             min(day, safeTotalDays)
         }
 
         // Porcentajes
         val percentDataRemaining = (safeRemainingMB / safePackageMB).toFloat().coerceIn(0f, 1f)
-        val percentTimeElapsed = (safeElapsed.toFloat() / safeTotalDays.toFloat()).coerceIn(0f, 1f)
+        val percentTimeElapsed = (displayElapsed.toFloat() / safeTotalDays.toFloat()).coerceIn(0f, 1f)
 
         // Estado del semáforo
         val paceStatus = when {
             safeRemainingMB <= 0.0 -> DataPaceStatus.CRITICAL_DEPLETED
             willLastWholeMonth && projectedDeficitOrSurplusMB >= (safePackageMB * 0.15) -> DataPaceStatus.SURPLUS_SAFE
             willLastWholeMonth -> DataPaceStatus.ON_TRACK
-            daysOfDataLeft >= (safeRemainingDays - 4) -> DataPaceStatus.RISK_EXHAUSTION
+            daysOfDataLeft >= (futureDays - 4) -> DataPaceStatus.RISK_EXHAUSTION
             else -> DataPaceStatus.CRITICAL_DEPLETED
         }
 
         // Simulación what-if
         val (simDaysLeft, simEndBalance) = if (simulatedDailyMB != null && simulatedDailyMB > 0.0) {
             val dLeft = safeRemainingMB / simulatedDailyMB
-            val endBal = safeRemainingMB - (simulatedDailyMB * safeRemainingDays)
+            val endBal = safeRemainingMB - (simulatedDailyMB * futureDays)
             Pair(dLeft, endBal)
         } else {
             Pair(null, null)
@@ -127,28 +136,28 @@ object DataForecastCalculator {
                 iconType = "video",
                 mbPerHour = 1500.0,
                 hoursAvailableTotal = safeRemainingMB / 1500.0,
-                minutesPerDayRemaining = if (safeRemainingDays > 0) ((safeDailyAllowanceMB / 1500.0) * 60).roundToInt() else 0
+                minutesPerDayRemaining = if (futureDays > 0) ((safeDailyAllowanceMB / 1500.0) * 60).roundToInt() else 0
             ),
             DataActivityAllowance(
                 title = "Redes Sociales (TikTok / Reels / IG)",
                 iconType = "social",
                 mbPerHour = 250.0,
                 hoursAvailableTotal = safeRemainingMB / 250.0,
-                minutesPerDayRemaining = if (safeRemainingDays > 0) ((safeDailyAllowanceMB / 250.0) * 60).roundToInt() else 0
+                minutesPerDayRemaining = if (futureDays > 0) ((safeDailyAllowanceMB / 250.0) * 60).roundToInt() else 0
             ),
             DataActivityAllowance(
                 title = "Música Online (Spotify / Deezer)",
                 iconType = "music",
                 mbPerHour = 60.0,
                 hoursAvailableTotal = safeRemainingMB / 60.0,
-                minutesPerDayRemaining = if (safeRemainingDays > 0) ((safeDailyAllowanceMB / 60.0) * 60).roundToInt() else 0
+                minutesPerDayRemaining = if (futureDays > 0) ((safeDailyAllowanceMB / 60.0) * 60).roundToInt() else 0
             ),
             DataActivityAllowance(
                 title = "WhatsApp y Navegación Web",
                 iconType = "chat",
                 mbPerHour = 20.0,
                 hoursAvailableTotal = safeRemainingMB / 20.0,
-                minutesPerDayRemaining = if (safeRemainingDays > 0) ((safeDailyAllowanceMB / 20.0) * 60).roundToInt() else 0
+                minutesPerDayRemaining = if (futureDays > 0) ((safeDailyAllowanceMB / 20.0) * 60).roundToInt() else 0
             )
         )
 
@@ -157,8 +166,8 @@ object DataForecastCalculator {
             remainingBalanceMB = safeRemainingMB,
             consumedMB = consumedMB,
             totalCycleDays = safeTotalDays,
-            daysElapsed = safeElapsed,
-            daysRemaining = safeRemainingDays,
+            daysElapsed = displayElapsed,
+            daysRemaining = daysRemaining,
             dailyBurnRateMB = dailyBurnRateMB,
             safeDailyAllowanceMB = safeDailyAllowanceMB,
             willLastWholeMonth = willLastWholeMonth,

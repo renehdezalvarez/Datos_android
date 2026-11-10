@@ -97,10 +97,11 @@ object UssdParser {
     private val dayWord = """d[ií]as?"""
 
     // Phrasings where the number clearly refers to the days LEFT,
-    // e.g. "le quedan 20 días", "vence en 5 días", "20 días restantes".
+    // e.g. "le quedan 20 días", "vence en 5 días", "20 días restantes",
+    // "validos 14 dias", "vigencia de 14 dias".
     private val anchoredDayPatterns = listOf(
-        Regex("""(?:quedan|restan|resta|vence en|vence dentro de|disponibles?|vigencia)\s*:?\s*(\d{1,3})\s*(?:$dayWord)\b"""),
-        Regex("""(\d{1,3})\s*(?:$dayWord)\s*(?:restantes?|disponibles?|de validez|de vigencia)\b""")
+        Regex("""(?:quedan|restan|resta|vence en|vence dentro de|disponibles?|vigencia|v[áa]lid[ao]s?)\s*(?::|de|por)?\s*(\d{1,3})\s*(?:$dayWord)\b"""),
+        Regex("""(\d{1,3})\s*(?:$dayWord)\s*(?:restantes?|disponibles?|de validez|de vigencia|v[áa]lid[ao]s?)\b""")
     )
 
     // Expiration date, e.g. "válido hasta 25/11", "vence el 03/12/2026".

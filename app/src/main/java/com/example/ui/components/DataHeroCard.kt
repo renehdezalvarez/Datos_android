@@ -160,7 +160,11 @@ fun DataHeroCard(
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
                         Text(
-                            text = "Faltan ${forecast.daysRemaining} días",
+                            text = when {
+                                forecast.daysRemaining <= 0 -> "Paquete vencido"
+                                forecast.daysRemaining == 1 -> "Falta 1 día"
+                                else -> "Faltan ${forecast.daysRemaining} días"
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

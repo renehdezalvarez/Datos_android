@@ -279,7 +279,11 @@ fun Prepaid35LineScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "${forecast.daysRemaining} días restantes • Vence: ${lineState.expirationDateFormatted}",
+                                    text = when {
+                                        forecast.daysRemaining <= 0 -> "Venció: ${lineState.expirationDateFormatted}"
+                                        forecast.daysRemaining == 1 -> "1 día restante • Vence: ${lineState.expirationDateFormatted}"
+                                        else -> "${forecast.daysRemaining} días restantes • Vence: ${lineState.expirationDateFormatted}"
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -369,8 +373,8 @@ fun Prepaid35LineScreen(
 
                         BreakdownItem(
                             label = "Gasto proyectado al día 35",
-                            sublabel = "${DataFormatters.format(forecast.dailyBurnRateMB)}/día × ${forecast.daysRemaining} días restantes",
-                            value = DataFormatters.format(forecast.dailyBurnRateMB * forecast.daysRemaining, unit)
+                            sublabel = "${DataFormatters.format(forecast.dailyBurnRateMB)}/día × ${forecast.daysRemaining.coerceAtLeast(0)} días restantes",
+                            value = DataFormatters.format(forecast.dailyBurnRateMB * forecast.daysRemaining.coerceAtLeast(0), unit)
                         )
 
                         Spacer(modifier = Modifier.height(14.dp))

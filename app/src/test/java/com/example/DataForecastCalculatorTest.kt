@@ -120,7 +120,8 @@ class DataForecastCalculatorTest {
 
         assertEquals(35, result.totalCycleDays)
         assertEquals(7, result.daysElapsed)
-        assertEquals(28, result.daysRemaining)
+        // Day 7 of 35 -> 29 days remaining counting today (operator semantics)
+        assertEquals(29, result.daysRemaining)
         assertEquals(1644.0, result.consumedMB, 0.001)
         // Burn rate: 1644 / 7 = 234.857 MB/day
         assertEquals(234.86, result.dailyBurnRateMB, 0.01)
@@ -130,6 +131,52 @@ class DataForecastCalculatorTest {
         assertFalse(result.willLastWholeMonth)
         // Exhaustion cycle day: 7 + 19 = 26
         assertEquals(26, result.exhaustionCycleDay)
+    }
+
+    @Test
+    fun testDataForecast_operatorDaysMatchExactly() {
+        // The carrier answers "validos 14 dias" on a 35-day package.
+        // applyUssdCapture anchors the cycle to day 35 - 14 + 1 = 22; the
+        // forecast must then show EXACTLY 14 days remaining, like the operator.
+        val result = DataForecastCalculator.calculate(
+            packageTotalMB = 6144.0,
+            remainingBalanceMB = 2048.0,
+            totalCycleDays = 35,
+            daysElapsed = 35 - 14 + 1
+        )
+
+        assertEquals(22, result.daysElapsed)
+        assertEquals(14, result.daysRemaining)
+    }
+
+    @Test
+    fun testDataForecast_lastDayOfCycleCountsToday() {
+        // On the last day of the cycle today still counts: 1 day remaining.
+        val result = DataForecastCalculator.calculate(
+            packageTotalMB = 6144.0,
+            remainingBalanceMB = 100.0,
+            totalCycleDays = 35,
+            daysElapsed = 35
+        )
+
+        assertEquals(35, result.daysElapsed)
+        assertEquals(1, result.daysRemaining)
+    }
+
+    @Test
+    fun testDataForecast_expiredPackageSurfacesVencido() {
+        // Purchase 2 days past the end of a 35-day cycle: the display day
+        // stays clamped at 35 but daysRemaining must go to zero/negative so
+        // the "Vencido" warning can trigger.
+        val result = DataForecastCalculator.calculate(
+            packageTotalMB = 6144.0,
+            remainingBalanceMB = 100.0,
+            totalCycleDays = 35,
+            daysElapsed = 37
+        )
+
+        assertEquals(35, result.daysElapsed)
+        assertTrue(result.daysRemaining <= 0)
     }
 
     @Test

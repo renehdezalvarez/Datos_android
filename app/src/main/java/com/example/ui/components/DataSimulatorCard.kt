@@ -98,7 +98,7 @@ fun DataSimulatorCard(
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Comprueba si te alcanzará el mes si ajustas tus megas diarios en los ${forecast.daysRemaining} días restantes:",
+                text = "Comprueba si te alcanzará el mes si ajustas tus megas diarios en los ${forecast.daysRemaining.coerceAtLeast(0)} días restantes:",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -207,7 +207,7 @@ fun DataSimulatorCard(
 
                     Text(
                         text = if (willReachEnd) {
-                            "Al terminar los ${forecast.daysRemaining} días restantes, te sobrarán aprox. ${DataFormatters.format(simEndBalance, displayUnit)}."
+                            "Al terminar los ${forecast.daysRemaining.coerceAtLeast(0)} días restantes, te sobrarán aprox. ${DataFormatters.format(simEndBalance, displayUnit)}."
                         } else {
                             "Te faltarán aprox. ${DataFormatters.format(kotlin.math.abs(simEndBalance), displayUnit)} antes de que cierre el ciclo mensual."
                         },

@@ -220,8 +220,10 @@ class DataForecastViewModel(
         val totalDays2 = _customTotalDaysLine2.value ?: plan2.totalCycleDays
         // Same as line 1: the day always flows from the purchase timestamp;
         // customCurrentDay is ignored so it can never freeze the cycle.
+        // No upper clamp: once the purchase is more than totalDays2 old the
+        // calculator reports daysRemaining <= 0 so "Vencido" surfaces.
         val daysFromPurchase = maxOf(1, ((System.currentTimeMillis() - plan2.purchaseTimestamp) / DAY_MS).toInt() + 1)
-        val currentDay2 = daysFromPurchase.coerceIn(1, totalDays2)
+        val currentDay2 = daysFromPurchase
 
         val forecastLine2 = DataForecastCalculator.calculate(
             packageTotalMB = plan2.packageTotalMB,
@@ -232,7 +234,11 @@ class DataForecastViewModel(
         )
 
         val expireCal = Calendar.getInstance().apply {
-            timeInMillis = plan2.purchaseTimestamp + (totalDays2.toLong() * 24L * 60L * 60L * 1000L)
+            // Day 1 is the purchase day itself, so the last day of the cycle
+            // falls (totalDays - 1) days after it. Keeps the "Vence:" date in
+            // sync with the operator's countdown ("validos 14 dias" -> the
+            // package dies 13 days from today, not 14).
+            timeInMillis = plan2.purchaseTimestamp + ((totalDays2 - 1).coerceAtLeast(0).toLong() * DAY_MS)
         }
         val expDateFormat = java.text.SimpleDateFormat("dd 'de' MMMM", java.util.Locale("es", "ES"))
         val expirationFormatted = expDateFormat.format(expireCal.time)
@@ -246,7 +252,7 @@ class DataForecastViewModel(
                 expirationDateFormatted = "Fin de mes"
             ),
             line2 = SingleLineState(
-                plan = plan2.copy(customCurrentDay = currentDay2, totalCycleDays = totalDays2),
+                plan = plan2.copy(customCurrentDay = currentDay2.coerceIn(1, totalDays2), totalCycleDays = totalDays2),
                 forecast = forecastLine2,
                 displayUnit = plan2.displayUnit,
                 simulatedDailyMB = sim2,
