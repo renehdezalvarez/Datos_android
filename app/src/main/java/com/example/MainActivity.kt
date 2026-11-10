@@ -308,10 +308,15 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 lineName = if (targetLineId == 1) "Línea 1 (Mensual)" else "Línea 2 (Prepago 35d)",
                 currentUssdCode = currentDialogLine.plan.ussdCode,
                 packageTotalMB = currentDialogLine.plan.packageTotalMB,
+                totalCycleDays = currentDialogLine.plan.totalCycleDays,
                 displayUnit = currentDialogLine.displayUnit,
+                autoReading = state.lastAutoReading?.takeIf { it.lineId == targetLineId },
                 onDismiss = { showUssdReadingDialog = false },
                 onSaveUssdCode = { code ->
                     viewModel.updateUssdCode(targetLineId, code)
+                },
+                onStartAutoConsult = {
+                    viewModel.startUssdConsultation(targetLineId)
                 },
                 onConfirmReading = { remainingMB, note ->
                     viewModel.recordUssdReading(targetLineId, remainingMB, note)

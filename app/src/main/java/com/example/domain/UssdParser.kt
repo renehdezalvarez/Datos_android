@@ -1,5 +1,7 @@
 package com.example.domain
 
+import java.util.Calendar
+
 /**
  * Single entry point for parsing mobile data quantities from USSD responses,
  * SMS texts or manual user input.
@@ -15,6 +17,8 @@ object UssdParser {
 
     // Number followed by a data unit: GB, MB, Giga(s), Mega(s), GiB, MiB.
     private val quantityPattern = Regex("""(?i)(\d+(?:[.,]\d+)?)\s*(GIB|GB|GIGAS?|MIB|MB|MEGAS?)\b""")
+
+    private const val DAY_MS = 24L * 60L * 60L * 1000L
 
     /**
      * Extracts mobile data balance in MB from either a raw number (e.g. "3.5")
@@ -84,5 +88,72 @@ object UssdParser {
         }
 
         return null
+    }
+
+    // ------------------------------------------------------------------
+    // Remaining days of the package (prepaid lines)
+    // ------------------------------------------------------------------
+
+    private val dayWord = """d[ií]as?"""
+
+    // Phrasings where the number clearly refers to the days LEFT,
+    // e.g. "le quedan 20 días", "vence en 5 días", "20 días restantes".
+    private val anchoredDayPatterns = listOf(
+        Regex("""(?:quedan|restan|resta|vence en|vence dentro de|disponibles?|vigencia)\s*:?\s*(\d{1,3})\s*(?:$dayWord)\b"""),
+        Regex("""(\d{1,3})\s*(?:$dayWord)\s*(?:restantes?|disponibles?|de validez|de vigencia)\b""")
+    )
+
+    // Expiration date, e.g. "válido hasta 25/11", "vence el 03/12/2026".
+    private val expirationDatePattern =
+        Regex("""(?:hasta|vence|expira|vigente)\s*(?:el\s*)?(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?""")
+
+    /**
+     * Extracts how many days the prepaid package has LEFT from a carrier message.
+     * Understands explicit counts ("le quedan 20 días") and expiration dates
+     * ("válido hasta 25/11" — counted from [now], both inclusive).
+     *
+     * When several "N días" appear (e.g. "paquete de 35 días, le quedan 20"),
+     * phrasings that clearly mean "remaining" win; otherwise the smallest
+     * count is used (remaining can never exceed the package duration).
+     */
+    fun parseDaysRemaining(text: String, now: Calendar? = null): Int? {
+        if (text.isBlank()) return null
+        val lower = text.lowercase()
+
+        for (pattern in anchoredDayPatterns) {
+            pattern.find(lower)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+        }
+
+        val allCounts = Regex("""(\d{1,3})\s*(?:$dayWord)\b""")
+            .findAll(lower)
+            .mapNotNull { it.groupValues[1].toIntOrNull() }
+            .toList()
+        if (allCounts.isNotEmpty()) return allCounts.min()
+
+        val dateMatch = expirationDatePattern.find(lower) ?: return null
+        val day = dateMatch.groupValues[1].toIntOrNull() ?: return null
+        val month = dateMatch.groupValues[2].toIntOrNull() ?: return null
+        if (day !in 1..31 || month !in 1..12) return null
+
+        val reference = now ?: Calendar.getInstance()
+        var year = reference.get(Calendar.YEAR)
+        val hasExplicitYear = dateMatch.groupValues[3].isNotEmpty()
+        if (hasExplicitYear) {
+            year = dateMatch.groupValues[3].toInt()
+            if (year < 100) year += 2000
+        }
+
+        val target = Calendar.getInstance().apply {
+            clear()
+            set(year, month - 1, day, 23, 59, 59)
+        }
+        // Without an explicit year, a date already in the past means next year.
+        if (!hasExplicitYear && target.timeInMillis < reference.timeInMillis) {
+            target.add(Calendar.YEAR, 1)
+        }
+
+        val diffMs = target.timeInMillis - reference.timeInMillis
+        val days = (diffMs / DAY_MS).toInt() + 1 // count today as a remaining day
+        return days.coerceAtLeast(0)
     }
 }

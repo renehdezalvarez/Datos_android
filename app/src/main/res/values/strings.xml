@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Previsor de Datos Móviles</string>
+    <string name="ussd_catcher_label">Lector de respuestas USSD</string>
+    <string name="ussd_catcher_description">Lee la respuesta de saldo de tu operador cuando marcas un código USSD desde Previsor de Datos Móviles, para registrar el saldo y los días restantes automáticamente. Solo lee la pantalla durante la consulta, justo después de que pulsas Marcar.</string>
 </resources>

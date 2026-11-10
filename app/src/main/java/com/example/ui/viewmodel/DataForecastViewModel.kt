@@ -8,7 +8,10 @@ import com.example.data.model.DataPlanEntity
 import com.example.data.repository.DataPlanRepository
 import com.example.domain.DataForecastCalculator
 import com.example.domain.DataForecastResult
+import com.example.domain.UssdParser
 import com.example.ui.components.DataFormatters
+import com.example.ussd.UssdCaptureHolder
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,8 +29,17 @@ data class SingleLineState(
     val expirationDateFormatted: String = ""
 )
 
+/** Result of an automatically interpreted USSD response. */
+data class UssdAutoReading(
+    val id: Long = System.currentTimeMillis(),
+    val lineId: Int,
+    val remainingMB: Double?,
+    val daysRemaining: Int?,
+    val newCycleDay: Int?,
+    val rawText: String
+)
+
 data class DataForecastUiState(
-    val activeLineId: Int = 1, // 1 for Line 1, 2 for Line 2
     val line1: SingleLineState = SingleLineState(
         plan = DataPlanEntity(id = 1),
         forecast = DataForecastCalculator.calculate(10240.0, 10240.0, 30, 1)
@@ -38,19 +50,31 @@ data class DataForecastUiState(
     ),
     val logs: List<DataBalanceLogEntity> = emptyList(),
     val calendarCurrentDay: Int = 1,
-    val calendarTotalDays: Int = 30
+    val calendarTotalDays: Int = 30,
+    val lastAutoReading: UssdAutoReading? = null
 )
 
 class DataForecastViewModel(
     private val repository: DataPlanRepository
 ) : ViewModel() {
 
+    companion object {
+        const val PREPAID_PLAN_TYPE = "PREPAID_35"
+        private const val DAY_MS = 24L * 60L * 60L * 1000L
+        private const val USSD_CONSULTATION_TIMEOUT_MS = 90_000L
+
+        fun provideFactory(repository: DataPlanRepository): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return DataForecastViewModel(repository) as T
+                }
+            }
+    }
+
     // Computed on each access so the app survives month changes while open.
     private fun currentDayOfMonth(): Int = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
     private fun currentMonthTotalDays(): Int = Calendar.getInstance().getActualMaximum(Calendar.DAY_OF_MONTH)
-
-    private val _activeLineId = MutableStateFlow(1)
-    val activeLineId: StateFlow<Int> = _activeLineId
 
     private val _simulatedDailyMBLine1 = MutableStateFlow<Double?>(null)
     private val _simulatedDailyMBLine2 = MutableStateFlow<Double?>(null)
@@ -61,6 +85,14 @@ class DataForecastViewModel(
     private val _customDayLine2 = MutableStateFlow<Int?>(null)
     private val _customTotalDaysLine2 = MutableStateFlow<Int?>(null)
 
+    private val _lastAutoReading = MutableStateFlow<UssdAutoReading?>(null)
+
+    /** USSD consultation the user started and is still waiting for. */
+    private data class PendingUssd(val lineId: Int, val startedAtMs: Long)
+
+    @Volatile
+    private var pendingUssd: PendingUssd? = null
+
     init {
         viewModelScope.launch {
             val existingPlan1 = repository.getDataPlan(1).firstOrNull()
@@ -69,15 +101,91 @@ class DataForecastViewModel(
                 repository.seedInitialDataIfEmpty()
             }
         }
+
+        // Apply every captured USSD response to the line that started the
+        // consultation. Captures are ignored when nobody is waiting for them.
+        viewModelScope.launch {
+            UssdCaptureHolder.lastCapture.collect { capture ->
+                val pending = pendingUssd ?: return@collect
+                if (capture == null || capture.timestampMs < pending.startedAtMs) return@collect
+                pendingUssd = null
+                UssdCaptureHolder.disarm()
+                applyUssdCapture(pending.lineId, capture.text)
+            }
+        }
+    }
+
+    /**
+     * Starts an automatic USSD consultation for [lineId]: arms the catcher,
+     * remembers which line is waiting and times out after 90 seconds.
+     * The UI is expected to dial the USSD code right after calling this.
+     */
+    fun startUssdConsultation(lineId: Int) {
+        val pending = PendingUssd(lineId, System.currentTimeMillis())
+        pendingUssd = pending
+        UssdCaptureHolder.clear()
+        UssdCaptureHolder.arm()
+        viewModelScope.launch {
+            delay(USSD_CONSULTATION_TIMEOUT_MS)
+            if (pendingUssd?.startedAtMs == pending.startedAtMs) {
+                pendingUssd = null
+                UssdCaptureHolder.disarm()
+            }
+        }
+    }
+
+    /** Parses and saves a captured USSD response onto its line. */
+    private suspend fun applyUssdCapture(lineId: Int, text: String) {
+        val mb = UssdParser.parseDataBalanceMB(text)
+        val daysRemaining = UssdParser.parseDaysRemaining(text)
+        if (mb == null && daysRemaining == null) return
+
+        val current = repository.getDataPlan(lineId).firstOrNull() ?: return
+        var updated = current
+        var newCycleDay: Int? = null
+
+        if (mb != null) {
+            updated = updated.copy(remainingBalanceMB = mb.coerceIn(0.0, updated.packageTotalMB))
+        }
+
+        if (daysRemaining != null && updated.planType == PREPAID_PLAN_TYPE) {
+            // "quedan N días" of a totalCycleDays package -> day = total - remaining + 1.
+            newCycleDay = (updated.totalCycleDays - daysRemaining + 1)
+                .coerceIn(1, updated.totalCycleDays)
+            updated = updated.copy(
+                customCurrentDay = newCycleDay,
+                // Keep the purchase timestamp consistent with the reading so
+                // the countdown keeps flowing on its own afterwards.
+                purchaseTimestamp = System.currentTimeMillis() - (newCycleDay - 1) * DAY_MS
+            )
+        }
+
+        repository.saveOrUpdatePlan(updated)
+
+        val day = updated.customCurrentDay ?: currentDayOfMonth()
+        repository.addLog(
+            lineId,
+            updated.remainingBalanceMB,
+            day,
+            "Lectura USSD automática: ${text.replace('\n', ' ').take(120)}"
+        )
+
+        _lastAutoReading.value = UssdAutoReading(
+            lineId = lineId,
+            remainingMB = mb?.let { it.coerceIn(0.0, updated.packageTotalMB) },
+            daysRemaining = daysRemaining,
+            newCycleDay = newCycleDay,
+            rawText = text.trim()
+        )
     }
 
     val uiState: StateFlow<DataForecastUiState> = combine(
         repository.getDataPlan(1),
         repository.getDataPlan(2),
         repository.getAllLogs(),
-        _activeLineId,
+        _lastAutoReading,
         combine(_simulatedDailyMBLine1, _simulatedDailyMBLine2) { s1, s2 -> Pair(s1, s2) }
-    ) { p1, p2, logs, activeId, simulations ->
+    ) { p1, p2, logs, lastAutoReading, simulations ->
         val (sim1, sim2) = simulations
         val plan1 = p1 ?: DataPlanEntity(id = 1, totalCycleDays = currentMonthTotalDays(), customCurrentDay = currentDayOfMonth())
         val plan2 = p2 ?: DataPlanEntity(id = 2, totalCycleDays = 35, packageTotalMB = 6144.0, remainingBalanceMB = 6144.0, planType = "PREPAID_35", operatorName = "Línea 2 (Prepago)")
@@ -115,7 +223,6 @@ class DataForecastViewModel(
         val expirationFormatted = expDateFormat.format(expireCal.time)
 
         DataForecastUiState(
-            activeLineId = activeId,
             line1 = SingleLineState(
                 plan = plan1.copy(customCurrentDay = currentDay1, totalCycleDays = totalDays1),
                 forecast = forecastLine1,
@@ -132,17 +239,14 @@ class DataForecastViewModel(
             ),
             logs = logs,
             calendarCurrentDay = currentDayOfMonth(),
-            calendarTotalDays = currentMonthTotalDays()
+            calendarTotalDays = currentMonthTotalDays(),
+            lastAutoReading = lastAutoReading
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = DataForecastUiState()
     )
-
-    fun selectLine(lineId: Int) {
-        _activeLineId.value = lineId
-    }
 
     fun updateRemainingBalance(lineId: Int, remainingMB: Double) {
         viewModelScope.launch {
@@ -300,15 +404,5 @@ class DataForecastViewModel(
         viewModelScope.launch {
             repository.deleteLog(id)
         }
-    }
-
-    companion object {
-        fun provideFactory(repository: DataPlanRepository): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return DataForecastViewModel(repository) as T
-                }
-            }
     }
 }

@@ -12,8 +12,8 @@ android {
     applicationId = "com.aistudio.previsiongastos.pkwqzl"
     minSdk = 24
     targetSdk = 36
-    versionCode = 9
-    versionName = "8.1"
+    versionCode = 10
+    versionName = "8.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

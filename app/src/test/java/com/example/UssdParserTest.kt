@@ -4,6 +4,7 @@ import com.example.domain.UssdParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.util.Calendar
 
 class UssdParserTest {
 
@@ -82,5 +83,54 @@ class UssdParserTest {
         assertNull(UssdParser.parse("", "GB"))
         assertNull(UssdParser.parse("   ", "GB"))
         assertNull(UssdParser.parse("abc", "GB"))
+    }
+
+    // ------------------------------------------------------------------
+    // parseDaysRemaining: días restantes del paquete prepago
+    // ------------------------------------------------------------------
+
+    private fun dateOf(year: Int, month: Int, day: Int): Calendar =
+        Calendar.getInstance().apply { set(year, month, day, 12, 0, 0) }
+
+    @Test
+    fun testParseDaysRemaining_explicitCounts() {
+        assertEquals(20, UssdParser.parseDaysRemaining("le quedan 2.5 GB y 20 días"))
+        assertEquals(20, UssdParser.parseDaysRemaining("Su saldo vence en 20 días"))
+        assertEquals(20, UssdParser.parseDaysRemaining("20 DIAS restantes"))
+        assertEquals(5, UssdParser.parseDaysRemaining("quedan 5 dia"))
+    }
+
+    @Test
+    fun testParseDaysRemaining_prefersRemainingOverTotal() {
+        // "paquete DE 35 días" (total) + "quedan 20 días" (remaining) -> 20
+        assertEquals(20, UssdParser.parseDaysRemaining("Paquete de 35 días, le quedan 20 días"))
+        // Without a remaining-phrasing, the smallest count is the safest guess
+        assertEquals(20, UssdParser.parseDaysRemaining("Su paquete de 35 días tiene 20 días"))
+    }
+
+    @Test
+    fun testParseDaysRemaining_expirationDates() {
+        val now = dateOf(2026, Calendar.NOVEMBER, 10)
+        // 10 -> 25 Nov inclusive = 16 days
+        assertEquals(16, UssdParser.parseDaysRemaining("2.5 GB válidos hasta 25/11", now))
+        assertEquals(16, UssdParser.parseDaysRemaining("válido hasta el 25/11/2026", now))
+        // Month rollover into December
+        assertEquals(24, UssdParser.parseDaysRemaining("válido hasta 03/12", now))
+        // Same day = expires tonight
+        assertEquals(1, UssdParser.parseDaysRemaining("válido hasta 10/11", now))
+    }
+
+    @Test
+    fun testParseDaysRemaining_yearWrapAround() {
+        val now = dateOf(2026, Calendar.DECEMBER, 28)
+        // 05/01 without year must be interpreted as January NEXT year
+        assertEquals(9, UssdParser.parseDaysRemaining("vigente hasta 05/01", now))
+    }
+
+    @Test
+    fun testParseDaysRemaining_invalid() {
+        assertNull(UssdParser.parseDaysRemaining("No tiene paquetes activos"))
+        assertNull(UssdParser.parseDaysRemaining(""))
+        assertNull(UssdParser.parseDaysRemaining("Su saldo principal es 25.00 CUP"))
     }
 }
