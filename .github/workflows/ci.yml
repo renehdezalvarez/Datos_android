@@ -3,7 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -46,3 +50,17 @@ jobs:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+
+      # Tag pushes (v*) publish a GitHub Release with the APK attached,
+      # built entirely on GitHub's runners.
+      - name: Publish GitHub Release with APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp app/build/outputs/apk/debug/app-debug.apk "PrevisorDatos_${VERSION}.apk"
+          sha256sum "PrevisorDatos_${VERSION}.apk"
+          gh release create "$GITHUB_REF_NAME" "PrevisorDatos_${VERSION}.apk" \
+            --title "$GITHUB_REF_NAME – Previsor de Datos Móviles" \
+            --generate-notes
