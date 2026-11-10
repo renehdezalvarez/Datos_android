@@ -46,6 +46,9 @@ data class DataForecastResult(
 
 object DataForecastCalculator {
 
+    /** Sentinel value used when there is remaining balance but no consumption yet. */
+    const val DAYS_INDEFINITE = 999.0
+
     fun calculate(
         packageTotalMB: Double,
         remainingBalanceMB: Double,
@@ -75,7 +78,7 @@ object DataForecastCalculator {
         val daysOfDataLeft = if (dailyBurnRateMB > 0) {
             safeRemainingMB / dailyBurnRateMB
         } else if (safeRemainingMB > 0) {
-            999.0 // No consumption yet, lasts indefinitely
+            DAYS_INDEFINITE // No consumption yet, lasts indefinitely
         } else {
             0.0
         }

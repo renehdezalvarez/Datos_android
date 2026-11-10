@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import com.example.domain.DataForecastCalculator
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -41,7 +42,9 @@ object DataFormatters {
     }
 
     fun formatDays(days: Double): String {
-        return if (days >= 990.0) {
+        return if (days >= DataForecastCalculator.DAYS_INDEFINITE - 9.0) {
+            // Anything close to the "indefinite" sentinel means the balance
+            // comfortably outlasts the cycle.
             "Todo el ciclo"
         } else if (days >= 10.0) {
             "${days.roundToInt()} días"
