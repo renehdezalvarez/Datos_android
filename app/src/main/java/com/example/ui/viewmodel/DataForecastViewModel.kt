@@ -30,11 +30,11 @@ data class DataForecastUiState(
     val activeLineId: Int = 1, // 1 for Line 1, 2 for Line 2
     val line1: SingleLineState = SingleLineState(
         plan = DataPlanEntity(id = 1),
-        forecast = DataForecastCalculator.calculate(10240.0, 3500.0, 30, 12)
+        forecast = DataForecastCalculator.calculate(10240.0, 10240.0, 30, 1)
     ),
     val line2: SingleLineState = SingleLineState(
         plan = DataPlanEntity(id = 2, totalCycleDays = 35, planType = "PREPAID_35", operatorName = "Línea 2 (Prepago)"),
-        forecast = DataForecastCalculator.calculate(6144.0, 4200.0, 35, 8)
+        forecast = DataForecastCalculator.calculate(6144.0, 6144.0, 35, 1)
     ),
     val logs: List<DataBalanceLogEntity> = emptyList(),
     val calendarCurrentDay: Int = 1,
@@ -45,9 +45,9 @@ class DataForecastViewModel(
     private val repository: DataPlanRepository
 ) : ViewModel() {
 
-    private val calendar = Calendar.getInstance()
-    private val realDay = calendar.get(Calendar.DAY_OF_MONTH)
-    private val realTotalDays = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+    // Computed on each access so the app survives month changes while open.
+    private fun currentDayOfMonth(): Int = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+    private fun currentMonthTotalDays(): Int = Calendar.getInstance().getActualMaximum(Calendar.DAY_OF_MONTH)
 
     private val _activeLineId = MutableStateFlow(1)
     val activeLineId: StateFlow<Int> = _activeLineId
@@ -79,12 +79,12 @@ class DataForecastViewModel(
         combine(_simulatedDailyMBLine1, _simulatedDailyMBLine2) { s1, s2 -> Pair(s1, s2) }
     ) { p1, p2, logs, activeId, simulations ->
         val (sim1, sim2) = simulations
-        val plan1 = p1 ?: DataPlanEntity(id = 1, totalCycleDays = realTotalDays, customCurrentDay = realDay)
-        val plan2 = p2 ?: DataPlanEntity(id = 2, totalCycleDays = 35, packageTotalMB = 6144.0, remainingBalanceMB = 4200.0, planType = "PREPAID_35", operatorName = "Línea 2 (Prepago)")
+        val plan1 = p1 ?: DataPlanEntity(id = 1, totalCycleDays = currentMonthTotalDays(), customCurrentDay = currentDayOfMonth())
+        val plan2 = p2 ?: DataPlanEntity(id = 2, totalCycleDays = 35, packageTotalMB = 6144.0, remainingBalanceMB = 6144.0, planType = "PREPAID_35", operatorName = "Línea 2 (Prepago)")
 
         // Line 1 calculation
         val totalDays1 = _customTotalDaysLine1.value ?: plan1.totalCycleDays
-        val currentDay1 = (_customDayLine1.value ?: plan1.customCurrentDay ?: realDay).coerceIn(1, totalDays1)
+        val currentDay1 = (_customDayLine1.value ?: plan1.customCurrentDay ?: currentDayOfMonth()).coerceIn(1, totalDays1)
 
         val forecastLine1 = DataForecastCalculator.calculate(
             packageTotalMB = plan1.packageTotalMB,
@@ -131,8 +131,8 @@ class DataForecastViewModel(
                 expirationDateFormatted = expirationFormatted
             ),
             logs = logs,
-            calendarCurrentDay = realDay,
-            calendarTotalDays = realTotalDays
+            calendarCurrentDay = currentDayOfMonth(),
+            calendarTotalDays = currentMonthTotalDays()
         )
     }.stateIn(
         scope = viewModelScope,
@@ -151,7 +151,7 @@ class DataForecastViewModel(
             val updated = current.copy(remainingBalanceMB = safeMB)
             repository.saveOrUpdatePlan(updated)
 
-            val day = current.customCurrentDay ?: realDay
+            val day = current.customCurrentDay ?: currentDayOfMonth()
             repository.addLog(lineId, safeMB, day, "Actualización saldo Línea $lineId")
         }
     }
@@ -235,7 +235,7 @@ class DataForecastViewModel(
                 repository.saveOrUpdatePlan(
                     current.copy(
                         customCurrentDay = null,
-                        totalCycleDays = realTotalDays
+                        totalCycleDays = currentMonthTotalDays()
                     )
                 )
             }
@@ -290,7 +290,7 @@ class DataForecastViewModel(
         viewModelScope.launch {
             val current = repository.getDataPlan(lineId).firstOrNull() ?: return@launch
             val safeMB = remainingMB.coerceIn(0.0, current.packageTotalMB)
-            val day = current.customCurrentDay ?: realDay
+            val day = current.customCurrentDay ?: currentDayOfMonth()
             repository.saveOrUpdatePlan(current.copy(remainingBalanceMB = safeMB))
             repository.addLog(lineId, safeMB, day, note)
         }

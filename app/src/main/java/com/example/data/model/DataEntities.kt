@@ -8,7 +8,7 @@ data class DataPlanEntity(
     @PrimaryKey
     val id: Int = 1,
     val packageTotalMB: Double = 10240.0, // 10 GB
-    val remainingBalanceMB: Double = 3500.0, // 3.5 GB
+    val remainingBalanceMB: Double = 10240.0, // starts with the full package
     val totalCycleDays: Int = 30,
     val cycleStartDay: Int = 1,
     val customCurrentDay: Int? = null,

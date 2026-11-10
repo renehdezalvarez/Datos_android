@@ -4,6 +4,7 @@ import com.example.data.local.DataDao
 import com.example.data.model.DataBalanceLogEntity
 import com.example.data.model.DataPlanEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import java.util.Calendar
 
 class DataPlanRepository(private val dao: DataDao) {
@@ -32,54 +33,47 @@ class DataPlanRepository(private val dao: DataDao) {
     suspend fun deleteLog(id: Long) = dao.deleteLogById(id)
 
     suspend fun seedInitialDataIfEmpty() {
-        val calendar = Calendar.getInstance()
-        val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
-        val maxDays = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+        // Each line is seeded independently so an existing user configuration
+        // is never overwritten by the defaults below.
+        if (dao.getDataPlan(1).firstOrNull() == null) {
+            val calendar = Calendar.getInstance()
+            val maxDays = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
 
-        // Line 1: Monthly line
-        val line1 = DataPlanEntity(
-            id = 1,
-            packageTotalMB = 10240.0, // 10 GB
-            remainingBalanceMB = 3480.0, // 3.48 GB
-            totalCycleDays = maxDays,
-            cycleStartDay = 1,
-            customCurrentDay = currentDay,
-            displayUnit = "GB",
-            operatorName = "Línea 1 (Mensual)",
-            planName = "Plan Mensual 10 GB",
-            planType = "MONTHLY",
-            purchaseTimestamp = System.currentTimeMillis() - (currentDay.toLong() * 24L * 60L * 60L * 1000L),
-            ussdCode = "*222#"
-        )
-        dao.saveOrUpdateDataPlan(line1)
+            // Line 1: monthly line, starts with the full package available.
+            val line1 = DataPlanEntity(
+                id = 1,
+                packageTotalMB = 10240.0, // 10 GB
+                remainingBalanceMB = 10240.0,
+                totalCycleDays = maxDays,
+                cycleStartDay = 1,
+                customCurrentDay = null, // falls back to the real calendar day
+                displayUnit = "GB",
+                operatorName = "Línea 1 (Mensual)",
+                planName = "Plan Mensual 10 GB",
+                planType = "MONTHLY",
+                purchaseTimestamp = System.currentTimeMillis(),
+                ussdCode = "*222#"
+            )
+            dao.saveOrUpdateDataPlan(line1)
+        }
 
-        // Line 2: Prepaid 35-day line!
-        // Suppose package of 6 GB (6144 MB), bought 8 days ago, remaining 4200 MB
-        val eightDaysAgo = System.currentTimeMillis() - (8L * 24L * 60L * 60L * 1000L)
-        val line2 = DataPlanEntity(
-            id = 2,
-            packageTotalMB = 6144.0, // 6 GB
-            remainingBalanceMB = 4200.0, // 4.2 GB
-            totalCycleDays = 35, // 35 days package!
-            cycleStartDay = 1,
-            customCurrentDay = 8,
-            displayUnit = "GB",
-            operatorName = "Línea 2 (Prepago)",
-            planName = "Paquete Prepago 35 Días",
-            planType = "PREPAID_35",
-            purchaseTimestamp = eightDaysAgo,
-            ussdCode = "*222*328#"
-        )
-        dao.saveOrUpdateDataPlan(line2)
-
-        // Seed logs for Line 1
-        dao.insertLog(DataBalanceLogEntity(planId = 1, cycleDay = (currentDay - 4).coerceAtLeast(1), remainingMB = 6100.0, note = "Lectura inicial"))
-        dao.insertLog(DataBalanceLogEntity(planId = 1, cycleDay = (currentDay - 2).coerceAtLeast(1), remainingMB = 4800.0, note = "Revisión quincenal"))
-        dao.insertLog(DataBalanceLogEntity(planId = 1, cycleDay = currentDay, remainingMB = 3480.0, note = "Saldo actual verificado"))
-
-        // Seed logs for Line 2
-        dao.insertLog(DataBalanceLogEntity(planId = 2, cycleDay = 1, remainingMB = 6144.0, note = "Activación paquete 35 días"))
-        dao.insertLog(DataBalanceLogEntity(planId = 2, cycleDay = 4, remainingMB = 5300.0, note = "Revisión 4to día"))
-        dao.insertLog(DataBalanceLogEntity(planId = 2, cycleDay = 8, remainingMB = 4200.0, note = "Saldo actual"))
+        if (dao.getDataPlan(2).firstOrNull() == null) {
+            // Line 2: prepaid 35-day line, starts with the full package available.
+            val line2 = DataPlanEntity(
+                id = 2,
+                packageTotalMB = 6144.0, // 6 GB
+                remainingBalanceMB = 6144.0,
+                totalCycleDays = 35, // 35 days package!
+                cycleStartDay = 1,
+                customCurrentDay = 1,
+                displayUnit = "GB",
+                operatorName = "Línea 2 (Prepago)",
+                planName = "Paquete Prepago 35 Días",
+                planType = "PREPAID_35",
+                purchaseTimestamp = System.currentTimeMillis(),
+                ussdCode = "*222*328#"
+            )
+            dao.saveOrUpdateDataPlan(line2)
+        }
     }
 }
