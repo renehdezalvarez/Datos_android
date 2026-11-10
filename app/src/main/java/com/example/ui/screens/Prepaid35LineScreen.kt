@@ -20,12 +20,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -58,7 +58,6 @@ import com.example.ui.viewmodel.SingleLineState
 @Composable
 fun Prepaid35LineScreen(
     lineState: SingleLineState,
-    onOpenUpdateBalance: () -> Unit,
     onOpenConfigurePackage: () -> Unit,
     onOpenAdjustDays: () -> Unit,
     onOpenNewPurchaseDialog: () -> Unit,
@@ -147,6 +146,64 @@ fun Prepaid35LineScreen(
             contentPadding = PaddingValues(top = 10.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Expiration warning: 5 days or less left on the package
+            val daysLeft = forecast.daysRemaining
+            if (daysLeft <= 5) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("prepaid_expiration_warning"),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = when {
+                                        daysLeft <= 0 -> "El paquete ha vencido"
+                                        else -> "¡Quedan $daysLeft ${if (daysLeft == 1) "día" else "días"} del paquete!"
+                                    },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = when {
+                                        daysLeft <= 0 -> "Compra un nuevo paquete para recuperar tus datos."
+                                        else -> "Compra un nuevo paquete antes de que venza para no quedarte sin datos."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FilledTonalButton(
+                                onClick = onOpenNewPurchaseDialog,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("prepaid_warning_buy_button")
+                            ) {
+                                Text("Comprar", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
             // New 35-day Purchase Banner
             item {
                 Card(
@@ -245,7 +302,7 @@ fun Prepaid35LineScreen(
                 DataHeroCard(
                     forecast = forecast,
                     displayUnit = unit,
-                    onOpenUpdateBalance = onOpenUpdateBalance,
+                    onOpenUssdReading = onOpenUssdReading,
                     onOpenConfigurePackage = onOpenConfigurePackage
                 )
             }
@@ -393,18 +450,6 @@ fun Prepaid35LineScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        OutlinedButton(
-                            onClick = onOpenUpdateBalance,
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("prepaid_action_update_balance")
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Anotar Saldo")
-                        }
-
                         FilledTonalButton(
                             onClick = onOpenConfigurePackage,
                             shape = RoundedCornerShape(14.dp),

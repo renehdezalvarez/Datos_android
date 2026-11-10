@@ -17,9 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
@@ -55,7 +53,6 @@ import com.example.ui.viewmodel.SingleLineState
 @Composable
 fun DataForecastScreen(
     lineState: SingleLineState,
-    onOpenUpdateBalance: () -> Unit,
     onOpenConfigurePackage: () -> Unit,
     onOpenAdjustDays: () -> Unit,
     onOpenUssdReading: () -> Unit,
@@ -186,7 +183,7 @@ fun DataForecastScreen(
                 DataHeroCard(
                     forecast = forecast,
                     displayUnit = displayUnit,
-                    onOpenUpdateBalance = onOpenUpdateBalance,
+                    onOpenUssdReading = onOpenUssdReading,
                     onOpenConfigurePackage = onOpenConfigurePackage
                 )
             }
@@ -334,18 +331,6 @@ fun DataForecastScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        OutlinedButton(
-                            onClick = onOpenUpdateBalance,
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("action_update_balance")
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Anotar Saldo")
-                        }
-
                         FilledTonalButton(
                             onClick = onOpenConfigurePackage,
                             shape = RoundedCornerShape(14.dp),

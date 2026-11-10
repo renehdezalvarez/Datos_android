@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Info
@@ -71,137 +70,6 @@ import com.example.domain.UssdParser
 import com.example.ui.theme.StatusSuccess
 import com.example.ui.viewmodel.UssdAutoReading
 import com.example.ussd.UssdCatcherService
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun UpdateBalanceDialog(
-    currentRemainingMB: Double,
-    packageTotalMB: Double,
-    displayUnit: String,
-    onDismiss: () -> Unit,
-    onConfirm: (newRemainingMB: Double) -> Unit
-) {
-    var inputUnit by remember { mutableStateOf(displayUnit) }
-    var valueText by remember {
-        val initialVal = if (displayUnit == "GB") {
-            String.format(java.util.Locale.US, "%.2f", currentRemainingMB / 1024.0)
-        } else {
-            currentRemainingMB.toInt().toString()
-        }
-        mutableStateOf(initialVal)
-    }
-
-    val packageGB = packageTotalMB / 1024.0
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Actualizar Saldo Restante", fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                Text(
-                    text = "Introduce el saldo de datos que te queda en este momento según tu operador:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Unit Selector
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = inputUnit == "GB",
-                        onClick = {
-                            if (inputUnit != "GB") {
-                                val currentMb = valueText.toDoubleOrNull() ?: 0.0
-                                valueText = String.format(java.util.Locale.US, "%.2f", currentMb / 1024.0)
-                                inputUnit = "GB"
-                            }
-                        },
-                        label = { Text("Gigabytes (GB)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = inputUnit == "MB",
-                        onClick = {
-                            if (inputUnit != "MB") {
-                                val currentGb = valueText.toDoubleOrNull() ?: 0.0
-                                valueText = (currentGb * 1024.0).toInt().toString()
-                                inputUnit = "MB"
-                            }
-                        },
-                        label = { Text("Megabytes (MB)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = valueText,
-                    onValueChange = { valueText = it },
-                    label = { Text("Saldo Restante ($inputUnit)") },
-                    placeholder = { Text(if (inputUnit == "GB") "Ej. 3.5" else "Ej. 3500") },
-                    leadingIcon = { Icon(Icons.Default.DataUsage, contentDescription = null) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("remaining_balance_input")
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Quick presets
-                Text(
-                    text = "Valores rápidos para paquete de ${packageGB.toInt()} GB:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val fractions = listOf(0.75 to "75%", 0.50 to "50%", 0.25 to "25%", 0.10 to "10%")
-                    fractions.forEach { (pct, label) ->
-                        val presetMB = packageTotalMB * pct
-                        FilterChip(
-                            selected = false,
-                            onClick = {
-                                valueText = if (inputUnit == "GB") {
-                                    String.format(java.util.Locale.US, "%.2f", presetMB / 1024.0)
-                                } else {
-                                    presetMB.toInt().toString()
-                                }
-                            },
-                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val rawVal = valueText.toDoubleOrNull() ?: 0.0
-                    val finalMB = if (inputUnit == "GB") rawVal * 1024.0 else rawVal
-                    onConfirm(finalMB.coerceIn(0.0, packageTotalMB))
-                    onDismiss()
-                },
-                modifier = Modifier.testTag("save_balance_button")
-            ) {
-                Text("Guardar Saldo")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
-        }
-    )
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -591,15 +459,62 @@ fun AddBalanceLogDialog(
 @Composable
 fun NewPrepaidPurchaseDialog(
     currentPackageTotalMB: Double,
+    currentRemainingMB: Double,
+    displayUnit: String,
     onDismiss: () -> Unit,
-    onConfirm: (packageMB: Double, totalDays: Int) -> Unit
+    onConfirm: (packageMB: Double, totalDays: Int, purchaseDateMillis: Long?) -> Unit
 ) {
     var sizeGBText by remember {
         val gb = currentPackageTotalMB / 1024.0
         mutableStateOf(if (gb == gb.toLong().toDouble()) gb.toLong().toString() else String.format(java.util.Locale.US, "%.1f", gb))
     }
     var daysText by remember { mutableStateOf("35") }
+    var dateText by remember { mutableStateOf("") }
     val presets = listOf(2.0, 4.0, 6.0, 8.0, 10.0, 15.0, 20.0, 30.0)
+
+    val dateFormat = remember {
+        java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).apply {
+            isLenient = false
+        }
+    }
+
+    // null = empty (today); parsed date or error message.
+    val parsedDate: Pair<Long?, String?> = remember(dateText) {
+        when {
+            dateText.isBlank() -> null to null
+            else -> {
+                val parsed = try {
+                    dateFormat.parse(dateText)
+                } catch (_: Exception) {
+                    null
+                }
+                when {
+                    parsed == null -> null to "Fecha no válida (usa dd/MM/aaaa)"
+                    else -> {
+                        val cal = java.util.Calendar.getInstance().apply {
+                            time = parsed
+                            set(java.util.Calendar.HOUR_OF_DAY, 12)
+                            set(java.util.Calendar.MINUTE, 0)
+                            set(java.util.Calendar.SECOND, 0)
+                            set(java.util.Calendar.MILLISECOND, 0)
+                        }
+                        val today = java.util.Calendar.getInstance().apply {
+                            set(java.util.Calendar.HOUR_OF_DAY, 23)
+                            set(java.util.Calendar.MINUTE, 59)
+                            set(java.util.Calendar.SECOND, 59)
+                        }
+                        when {
+                            cal.timeInMillis > today.timeInMillis -> null to "La fecha no puede ser futura"
+                            else -> cal.timeInMillis to null
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val purchaseGB = sizeGBText.toDoubleOrNull() ?: 0.0
+    val resultingMB = currentRemainingMB + purchaseGB * 1024.0
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -607,13 +522,13 @@ fun NewPrepaidPurchaseDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Autorenew, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Nueva Compra Prepago (35d)", fontWeight = FontWeight.Bold)
+                Text("Nueva Compra Prepago", fontWeight = FontWeight.Bold)
             }
         },
         text = {
             Column {
                 Text(
-                    text = "Registra la compra de un nuevo paquete. El saldo se reiniciará con la capacidad total y el ciclo comenzará desde el día 1 con vigencia de 35 días:",
+                    text = "Registra la compra de un nuevo paquete. La capacidad comprada se SUMA al saldo restante actual y el ciclo se reinicia desde la fecha de compra:",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -656,6 +571,54 @@ fun NewPrepaidPurchaseDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text("Fecha de compra (opcional)") },
+                    placeholder = { Text("Hoy (dd/MM/aaaa si fue otro día)") },
+                    leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null) },
+                    isError = parsedDate.second != null,
+                    supportingText = {
+                        if (parsedDate.second != null) {
+                            Text(parsedDate.second ?: "", color = MaterialTheme.colorScheme.error)
+                        } else {
+                            Text("Déjalo vacío si la compra es de hoy.")
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("new_purchase_date_input")
+                )
+
+                if (purchaseGB > 0.0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Text(
+                                text = "Saldo actual: ${DataFormatters.format(currentRemainingMB, displayUnit)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "+ Paquete comprado: ${DataFormatters.format(purchaseGB * 1024.0, displayUnit)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "= Saldo resultante: ${DataFormatters.format(resultingMB, displayUnit)}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -663,10 +626,10 @@ fun NewPrepaidPurchaseDialog(
                 onClick = {
                     val gb = sizeGBText.toDoubleOrNull() ?: 6.0
                     val days = daysText.toIntOrNull() ?: 35
-                    onConfirm(gb * 1024.0, days)
+                    onConfirm(gb * 1024.0, days, parsedDate.first)
                     onDismiss()
                 },
-                enabled = (sizeGBText.toDoubleOrNull() ?: 0.0) > 0.0,
+                enabled = purchaseGB > 0.0 && parsedDate.second == null,
                 modifier = Modifier.testTag("confirm_new_purchase_button")
             ) {
                 Text("Activar Paquete")

@@ -39,7 +39,6 @@ import com.example.ui.components.AddBalanceLogDialog
 import com.example.ui.components.AdjustCycleDaysDialog
 import com.example.ui.components.ConfigurePackageDialog
 import com.example.ui.components.NewPrepaidPurchaseDialog
-import com.example.ui.components.UpdateBalanceDialog
 import com.example.ui.components.UssdReadingDialog
 import com.example.ui.screens.DataForecastScreen
 import com.example.ui.screens.DataLogsScreen
@@ -73,7 +72,6 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var targetLineId by rememberSaveable { mutableIntStateOf(1) }
 
-    var showUpdateBalanceDialog by remember { mutableStateOf(false) }
     var showConfigurePackageDialog by remember { mutableStateOf(false) }
     var showAdjustDaysDialog by remember { mutableStateOf(false) }
     var showAddLogDialog by remember { mutableStateOf(false) }
@@ -164,10 +162,6 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
             when (selectedTab) {
                 0 -> DataForecastScreen(
                     lineState = state.line1,
-                    onOpenUpdateBalance = {
-                        targetLineId = 1
-                        showUpdateBalanceDialog = true
-                    },
                     onOpenConfigurePackage = {
                         targetLineId = 1
                         showConfigurePackageDialog = true
@@ -185,10 +179,6 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 )
                 1 -> Prepaid35LineScreen(
                     lineState = state.line2,
-                    onOpenUpdateBalance = {
-                        targetLineId = 2
-                        showUpdateBalanceDialog = true
-                    },
                     onOpenConfigurePackage = {
                         targetLineId = 2
                         showConfigurePackageDialog = true
@@ -236,19 +226,6 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
         val currentDialogLine = if (targetLineId == 1) state.line1 else state.line2
 
         // Dialogs
-        if (showUpdateBalanceDialog) {
-            UpdateBalanceDialog(
-                currentRemainingMB = currentDialogLine.plan.remainingBalanceMB,
-                packageTotalMB = currentDialogLine.plan.packageTotalMB,
-                displayUnit = currentDialogLine.displayUnit,
-                onDismiss = { showUpdateBalanceDialog = false },
-                onConfirm = { newMB ->
-                    viewModel.updateRemainingBalance(targetLineId, newMB)
-                    showUpdateBalanceDialog = false
-                }
-            )
-        }
-
         if (showConfigurePackageDialog) {
             ConfigurePackageDialog(
                 currentPackageTotalMB = currentDialogLine.plan.packageTotalMB,
@@ -281,9 +258,11 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
         if (showNewPurchaseDialog) {
             NewPrepaidPurchaseDialog(
                 currentPackageTotalMB = state.line2.plan.packageTotalMB,
+                currentRemainingMB = state.line2.plan.remainingBalanceMB,
+                displayUnit = state.line2.displayUnit,
                 onDismiss = { showNewPurchaseDialog = false },
-                onConfirm = { packageMB, totalDays ->
-                    viewModel.registerNewPrepaidPurchase(2, packageMB, totalDays)
+                onConfirm = { packageMB, totalDays, purchaseDateMillis ->
+                    viewModel.registerNewPrepaidPurchase(2, packageMB, totalDays, purchaseDateMillis)
                     showNewPurchaseDialog = false
                 }
             )

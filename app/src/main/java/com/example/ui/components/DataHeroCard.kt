@@ -18,7 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DataUsage
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.TrendingDown
@@ -56,7 +56,7 @@ import com.example.ui.theme.StatusWarningContainer
 fun DataHeroCard(
     forecast: DataForecastResult,
     displayUnit: String,
-    onOpenUpdateBalance: () -> Unit,
+    onOpenUssdReading: () -> Unit,
     onOpenConfigurePackage: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -212,18 +212,18 @@ fun DataHeroCard(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilledTonalButton(
-                            onClick = onOpenUpdateBalance,
+                            onClick = onOpenUssdReading,
                             shape = RoundedCornerShape(12.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.testTag("update_balance_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Edit,
+                                imageVector = Icons.Default.Dialpad,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Saldo", style = MaterialTheme.typography.labelMedium)
+                            Text("Consultar Saldo", style = MaterialTheme.typography.labelMedium)
                         }
 
                         if (onOpenConfigurePackage != null) {
