@@ -75,6 +75,7 @@ import com.example.ussd.UssdCatcherService
 fun AdjustCycleDaysDialog(
     currentDay: Int,
     totalCycleDays: Int,
+    monthlyCalendarCycle: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (currentDay: Int, totalCycleDays: Int) -> Unit,
     onResetCalendar: () -> Unit
@@ -94,7 +95,11 @@ fun AdjustCycleDaysDialog(
         text = {
             Column {
                 Text(
-                    text = "Ajusta en qué día del paquete te encuentras y cuántos días dura tu ciclo de facturación:",
+                    text = if (monthlyCalendarCycle) {
+                        "Ajusta en qué día del mes te encuentras. La duración del ciclo de esta línea sigue el mes calendario (28-31 días según el mes) y se actualiza sola:"
+                    } else {
+                        "Ajusta en qué día del paquete te encuentras y cuántos días dura tu ciclo de facturación:"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -116,10 +121,14 @@ fun AdjustCycleDaysDialog(
 
                     OutlinedTextField(
                         value = totDaysText,
-                        onValueChange = { totDaysText = it },
+                        onValueChange = { if (!monthlyCalendarCycle) totDaysText = it },
+                        readOnly = monthlyCalendarCycle,
                         label = { Text("Días totales") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        supportingText = if (monthlyCalendarCycle) {
+                            { Text("Según el mes calendario") }
+                        } else null,
                         modifier = Modifier.weight(1f).testTag("dialog_total_days_input")
                     )
                 }

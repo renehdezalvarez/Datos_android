@@ -82,10 +82,30 @@ class DataForecastViewModel(
         return fromStart.coerceIn(1, totalDays)
     }
 
+    /**
+     * Cycle day for the monthly line: today's calendar day plus the
+     * correction implied by the user's last "Ajustar Días". The correction
+     * is recovered from the stored pair (customCurrentDay,
+     * purchaseTimestamp) — the anchor was chosen so the chosen day fell on
+     * the adjustment date — and survives month changes without ever
+     * freezing the day. A null customCurrentDay means "follow the calendar".
+     */
+    private fun line1CycleDay(plan: DataPlanEntity): Int {
+        val correction = plan.customCurrentDay?.let { chosen ->
+            val adjustedOn = Calendar.getInstance().apply {
+                timeInMillis = plan.purchaseTimestamp + (chosen - 1) * DAY_MS
+            }
+            chosen - adjustedOn.get(Calendar.DAY_OF_MONTH)
+        } ?: 0
+        return (currentDayOfMonth() + correction).coerceIn(1, currentMonthTotalDays())
+    }
+
+    /** The day the UI currently shows for a line, used when logging readings. */
+    private fun displayedCycleDay(lineId: Int, plan: DataPlanEntity): Int =
+        if (lineId == 1) line1CycleDay(plan) else cycleDayOf(plan, plan.totalCycleDays)
+
     private val _simulatedDailyMBLine1 = MutableStateFlow<Double?>(null)
     private val _simulatedDailyMBLine2 = MutableStateFlow<Double?>(null)
-
-    private val _customTotalDaysLine1 = MutableStateFlow<Int?>(null)
 
     private val _customTotalDaysLine2 = MutableStateFlow<Int?>(null)
 
@@ -166,7 +186,7 @@ class DataForecastViewModel(
 
         repository.saveOrUpdatePlan(updated)
 
-        val day = cycleDayOf(updated, updated.totalCycleDays)
+        val day = displayedCycleDay(lineId, updated)
         repository.addLog(
             lineId,
             updated.remainingBalanceMB,
@@ -191,22 +211,17 @@ class DataForecastViewModel(
         combine(_simulatedDailyMBLine1, _simulatedDailyMBLine2) { s1, s2 -> Pair(s1, s2) }
     ) { p1, p2, logs, lastAutoReading, simulations ->
         val (sim1, sim2) = simulations
-        val plan1 = p1 ?: DataPlanEntity(
-            id = 1,
-            totalCycleDays = currentMonthTotalDays(),
-            // Anchored to day 1 of the month so the computed day matches
-            // today's calendar day.
-            purchaseTimestamp = System.currentTimeMillis() - (currentDayOfMonth() - 1) * DAY_MS
-        )
+        val plan1 = p1 ?: DataPlanEntity(id = 1, totalCycleDays = currentMonthTotalDays())
         val plan2 = p2 ?: DataPlanEntity(id = 2, totalCycleDays = 35, packageTotalMB = 6144.0, remainingBalanceMB = 6144.0, planType = PREPAID_PLAN_TYPE, operatorName = "Línea 2 (Prepago)")
 
-        // Line 1 calculation
-        val totalDays1 = _customTotalDaysLine1.value ?: plan1.totalCycleDays
-        // Days elapsed flow from the cycle start timestamp (updated whenever
-        // the user adjusts the cycle), so the day advances on its own on
-        // later days. Falls back to the calendar day for fresh installs.
-        val daysFromCycleStart1 = ((System.currentTimeMillis() - plan1.purchaseTimestamp) / DAY_MS).toInt() + 1
-        val currentDay1 = daysFromCycleStart1.coerceIn(1, totalDays1)
+        // Line 1 calculation — the monthly cycle follows the CALENDAR month,
+        // so its length automatically matches the real month (28/29/30/31
+        // days, February and leap years included).
+        val totalDays1 = currentMonthTotalDays()
+        // The day is today's calendar day plus the correction the user last
+        // set with "Ajustar Días" (if any). It advances on its own and never
+        // freezes.
+        val currentDay1 = line1CycleDay(plan1)
 
         val forecastLine1 = DataForecastCalculator.calculate(
             packageTotalMB = plan1.packageTotalMB,
@@ -218,10 +233,10 @@ class DataForecastViewModel(
 
         // Line 2 (Prepago 35 días) calculation:
         val totalDays2 = _customTotalDaysLine2.value ?: plan2.totalCycleDays
-        // Same as line 1: the day always flows from the purchase timestamp;
-        // customCurrentDay is ignored so it can never freeze the cycle.
-        // No upper clamp: once the purchase is more than totalDays2 old the
-        // calculator reports daysRemaining <= 0 so "Vencido" surfaces.
+        // The prepaid day flows from the purchase timestamp; customCurrentDay
+        // is ignored so it can never freeze the cycle. No upper clamp: once
+        // the purchase is more than totalDays2 old the calculator reports
+        // daysRemaining <= 0 so "Vencido" surfaces.
         val daysFromPurchase = maxOf(1, ((System.currentTimeMillis() - plan2.purchaseTimestamp) / DAY_MS).toInt() + 1)
         val currentDay2 = daysFromPurchase
 
@@ -283,16 +298,16 @@ class DataForecastViewModel(
             val defaultDays = if (lineId == 2) 35 else 30
             val safeDays = (totalCycleDays ?: current.totalCycleDays.takeIf { it > 0 } ?: defaultDays).coerceAtLeast(1)
 
-            if (lineId == 1) {
-                _customTotalDaysLine1.value = safeDays
-            } else {
+            if (lineId == 2) {
                 _customTotalDaysLine2.value = safeDays
             }
 
             val updated = current.copy(
                 packageTotalMB = safePackage,
                 remainingBalanceMB = safeRemaining,
-                totalCycleDays = safeDays,
+                // The monthly line's length is always the real calendar
+                // month; only the prepaid line keeps a configurable length.
+                totalCycleDays = if (lineId == 1) currentMonthTotalDays() else safeDays,
                 operatorName = operatorName ?: current.operatorName,
                 planName = "Paquete ${DataFormatters.format(safePackage, current.displayUnit)}"
             )
@@ -367,9 +382,7 @@ class DataForecastViewModel(
     }
 
     fun updateDays(lineId: Int, currentDay: Int, totalCycleDays: Int) {
-        if (lineId == 1) {
-            _customTotalDaysLine1.value = totalCycleDays
-        } else {
+        if (lineId == 2) {
             _customTotalDaysLine2.value = totalCycleDays
         }
         viewModelScope.launch {
@@ -377,10 +390,12 @@ class DataForecastViewModel(
             repository.saveOrUpdatePlan(
                 current.copy(
                     customCurrentDay = currentDay,
-                    totalCycleDays = totalCycleDays,
-                    // Anchor the cycle start so the day keeps advancing on its
-                    // own on later days instead of staying frozen at the
-                    // manually chosen value.
+                    // The monthly line's length is always the real calendar
+                    // month; only the prepaid line keeps a configurable length.
+                    totalCycleDays = if (lineId == 1) currentMonthTotalDays() else totalCycleDays,
+                    // Anchor the adjustment so the implied calendar-day
+                    // correction (chosen day vs. the adjustment date) can be
+                    // recovered later; the day still advances on its own.
                     purchaseTimestamp = System.currentTimeMillis() - (currentDay - 1) * DAY_MS
                 )
             )
@@ -389,15 +404,15 @@ class DataForecastViewModel(
 
     fun resetToRealCalendar(lineId: Int) {
         if (lineId == 1) {
-            _customTotalDaysLine1.value = null
             viewModelScope.launch {
                 val current = repository.getDataPlan(1).firstOrNull() ?: return@launch
                 repository.saveOrUpdatePlan(
                     current.copy(
+                        // Clearing the correction puts the monthly line back
+                        // in pure calendar mode: day = today's calendar day,
+                        // length = the real current month (28/29/30/31).
                         customCurrentDay = null,
                         totalCycleDays = currentMonthTotalDays(),
-                        // Re-anchor the cycle to the real calendar: day 1 of
-                        // the month, so the computed day matches today.
                         purchaseTimestamp = System.currentTimeMillis() - (currentDayOfMonth() - 1) * DAY_MS
                     )
                 )
@@ -454,7 +469,7 @@ class DataForecastViewModel(
         viewModelScope.launch {
             val current = repository.getDataPlan(lineId).firstOrNull() ?: return@launch
             val safeMB = remainingMB.coerceIn(0.0, current.packageTotalMB)
-            val day = cycleDayOf(current, current.totalCycleDays)
+            val day = displayedCycleDay(lineId, current)
             repository.saveOrUpdatePlan(current.copy(remainingBalanceMB = safeMB))
             repository.addLog(lineId, safeMB, day, note)
         }

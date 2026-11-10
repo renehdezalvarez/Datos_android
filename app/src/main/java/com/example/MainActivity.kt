@@ -263,6 +263,7 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 currentRemainingMB = currentDialogLine.plan.remainingBalanceMB,
                 currentTotalDays = currentDialogLine.plan.totalCycleDays,
                 displayUnit = currentDialogLine.displayUnit,
+                monthlyCalendarCycle = targetLineId == 1,
                 onDismiss = { showConfigurePackageDialog = false },
                 onConfirm = { packageMB, remainingMB, totalDays ->
                     viewModel.updatePackageConfiguration(targetLineId, packageMB, remainingMB, totalDays)
@@ -275,6 +276,7 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
             AdjustCycleDaysDialog(
                 currentDay = currentDialogLine.forecast.daysElapsed,
                 totalCycleDays = currentDialogLine.forecast.totalCycleDays,
+                monthlyCalendarCycle = targetLineId == 1,
                 onDismiss = { showAdjustDaysDialog = false },
                 onConfirm = { cd, td ->
                     viewModel.updateDays(targetLineId, cd, td)

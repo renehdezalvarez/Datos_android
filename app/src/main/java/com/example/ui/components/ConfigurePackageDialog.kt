@@ -78,6 +78,7 @@ fun ConfigurePackageDialog(
     currentRemainingMB: Double,
     currentTotalDays: Int,
     displayUnit: String,
+    monthlyCalendarCycle: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (packageMB: Double, remainingMB: Double, totalDays: Int) -> Unit
 ) {
@@ -222,10 +223,14 @@ fun ConfigurePackageDialog(
 
                 OutlinedTextField(
                     value = daysText,
-                    onValueChange = { daysText = it },
+                    onValueChange = { if (!monthlyCalendarCycle) daysText = it },
+                    readOnly = monthlyCalendarCycle,
                     label = { Text("Días del ciclo (duración mensual)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    supportingText = if (monthlyCalendarCycle) {
+                        { Text("La línea mensual sigue el mes calendario (28-31 días) y se actualiza sola") }
+                    } else null,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("package_cycle_days_input")

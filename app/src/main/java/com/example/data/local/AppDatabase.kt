@@ -14,10 +14,10 @@ import com.example.data.model.DataPlanEntity
         DataPlanEntity::class,
         DataBalanceLogEntity::class
     ],
-    version = 5,
+    version = 6,
     // Schemas are not exported: keeping app/schemas in sync from CI builds
-    // is not worth it for this project. New installs get v5 directly and
-    // existing ones migrate 4 -> 5 below.
+    // is not worth it for this project. New installs get v6 directly and
+    // existing ones migrate 4 -> 5 -> 6 below.
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,6 +35,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v6: the monthly line now follows the calendar month (28/29/30/31
+        // days). Legacy rows stored a manually-set day from old seeds that
+        // would otherwise show up as a spurious calendar-day correction.
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("UPDATE data_plan SET customCurrentDay = NULL WHERE id = 1")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -42,7 +51,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mobile_data_forecast.db"
                 )
-                    .addMigrations(MIGRATION_4_5)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
