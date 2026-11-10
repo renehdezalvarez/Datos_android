@@ -13,7 +13,7 @@ import com.example.data.model.DataPlanEntity
         DataBalanceLogEntity::class
     ],
     version = 4,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
