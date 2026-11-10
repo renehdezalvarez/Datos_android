@@ -1,10 +1,15 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -23,6 +28,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,9 +36,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.notifications.PrepaidExpiryWorker
 import com.example.data.local.AppDatabase
 import com.example.data.repository.DataPlanRepository
 import com.example.ui.components.AddBalanceLogDialog
@@ -56,11 +65,32 @@ class MainActivity : ComponentActivity() {
         val repository = DataPlanRepository(database.dataDao())
         val viewModelFactory = DataForecastViewModel.provideFactory(repository)
 
+        // Daily background check of the prepaid package deadline.
+        PrepaidExpiryWorker.schedule(applicationContext)
+
         setContent {
             MyApplicationTheme {
                 val viewModel: DataForecastViewModel = viewModel(factory = viewModelFactory)
+                RequestNotificationPermissionIfNeeded()
                 MainDataContent(viewModel = viewModel)
             }
+        }
+    }
+}
+
+/** Asks for POST_NOTIFICATIONS once on Android 13+ (needed by the expiry alert). */
+@Composable
+fun RequestNotificationPermissionIfNeeded() {
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                LocalContext.current, Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }
