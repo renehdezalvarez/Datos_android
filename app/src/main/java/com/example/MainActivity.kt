@@ -81,13 +81,14 @@ class MainActivity : ComponentActivity() {
 /** Asks for POST_NOTIFICATIONS once on Android 13+ (needed by the expiry alert). */
 @Composable
 fun RequestNotificationPermissionIfNeeded() {
+    val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(
-                LocalContext.current, Manifest.permission.POST_NOTIFICATIONS
+                context, Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
