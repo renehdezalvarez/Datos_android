@@ -46,12 +46,14 @@ class DataPlanRepository(private val dao: DataDao) {
                 remainingBalanceMB = 10240.0,
                 totalCycleDays = maxDays,
                 cycleStartDay = 1,
-                customCurrentDay = null, // falls back to the real calendar day
+                customCurrentDay = null,
                 displayUnit = "GB",
                 operatorName = "Línea 1 (Mensual)",
                 planName = "Plan Mensual 10 GB",
                 planType = "MONTHLY",
-                purchaseTimestamp = System.currentTimeMillis(),
+                // Anchored to day 1 of the month so the computed cycle day
+                // matches today's calendar day.
+                purchaseTimestamp = System.currentTimeMillis() - (calendar.get(Calendar.DAY_OF_MONTH) - 1) * 24L * 60L * 60L * 1000L,
                 ussdCode = "*111#"
             )
             dao.saveOrUpdateDataPlan(line1)

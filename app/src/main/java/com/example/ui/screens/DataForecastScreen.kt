@@ -250,7 +250,7 @@ fun DataForecastScreen(
 
                         DataRow(
                             label = "Gasto proyectado días restantes",
-                            sublabel = "${DataFormatters.format(forecast.dailyBurnRateMB, "auto")}/día × ${forecast.daysRemaining} días",
+                            sublabel = "${DataFormatters.format(forecast.dailyBurnRateMB)}/día × ${forecast.daysRemaining} días",
                             value = DataFormatters.format(forecast.dailyBurnRateMB * forecast.daysRemaining, displayUnit)
                         )
 
@@ -341,6 +341,18 @@ fun DataForecastScreen(
                             Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Cambiar Paquete")
+                        }
+
+                        OutlinedButton(
+                            onClick = onOpenAdjustDays,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("action_adjust_days")
+                        ) {
+                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Ajustar Días")
                         }
                     }
                 }

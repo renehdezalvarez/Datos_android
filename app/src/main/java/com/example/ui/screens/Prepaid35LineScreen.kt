@@ -369,7 +369,7 @@ fun Prepaid35LineScreen(
 
                         BreakdownItem(
                             label = "Gasto proyectado al día 35",
-                            sublabel = "${DataFormatters.format(forecast.dailyBurnRateMB, "auto")}/día × ${forecast.daysRemaining} días restantes",
+                            sublabel = "${DataFormatters.format(forecast.dailyBurnRateMB)}/día × ${forecast.daysRemaining} días restantes",
                             value = DataFormatters.format(forecast.dailyBurnRateMB * forecast.daysRemaining, unit)
                         )
 
@@ -460,6 +460,18 @@ fun Prepaid35LineScreen(
                             Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Cambiar Paquete")
+                        }
+
+                        OutlinedButton(
+                            onClick = onOpenAdjustDays,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("prepaid_action_adjust_days")
+                        ) {
+                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Ajustar Días")
                         }
                     }
                 }

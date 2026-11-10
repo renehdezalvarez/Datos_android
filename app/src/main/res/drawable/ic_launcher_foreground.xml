@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="66dp"
-        android:height="66dp"
-        android:drawable="@drawable/ic_mobile_data_launcher"
-        android:gravity="center" />
-</layer-list>
+<!-- Vector foreground for the adaptive launcher icon: three ascending data
+     usage bars, centered inside the 66dp safe zone of the 108dp canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#B3E5FC"
+        android:pathData="M38,58 H44 A3,3 0 0 1 47,61 V69 A3,3 0 0 1 44,72 H38 A3,3 0 0 1 35,69 V61 A3,3 0 0 1 38,58 Z" />
+    <path
+        android:fillColor="#E0F7FF"
+        android:pathData="M51,48 H57 A3,3 0 0 1 60,51 V69 A3,3 0 0 1 57,72 H51 A3,3 0 0 1 48,69 V51 A3,3 0 0 1 51,48 Z" />
+    <path
+        android:fillColor="#4DD8E6"
+        android:pathData="M64,38 H70 A3,3 0 0 1 73,41 V69 A3,3 0 0 1 70,72 H64 A3,3 0 0 1 61,69 V41 A3,3 0 0 1 64,38 Z" />
+</vector>

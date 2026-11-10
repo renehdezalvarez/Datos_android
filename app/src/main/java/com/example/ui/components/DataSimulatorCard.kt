@@ -151,7 +151,7 @@ fun DataSimulatorCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "${DataFormatters.format(simDaily, "auto")}/día",
+                    text = "${DataFormatters.format(simDaily)}/día",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.secondary

@@ -177,7 +177,7 @@ fun DataPaceCard(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${DataFormatters.format(forecast.dailyBurnRateMB, "auto")}/día",
+                            text = "${DataFormatters.format(forecast.dailyBurnRateMB)}/día",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -205,7 +205,7 @@ fun DataPaceCard(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${DataFormatters.format(forecast.safeDailyAllowanceMB, "auto")}/día",
+                            text = "${DataFormatters.format(forecast.safeDailyAllowanceMB)}/día",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -229,7 +229,7 @@ fun DataPaceCard(
             val adviceText = if (forecast.willLastWholeMonth) {
                 "Excelente control: Tu ritmo actual está por debajo de tu cuota diaria máxima. Te alcanzará cómodamente para todo el ciclo."
             } else {
-                "Atención: Tu ritmo actual supera en un $ratio% la cuota segura diaria. Reduce tu consumo a ${DataFormatters.format(forecast.safeDailyAllowanceMB, "auto")}/día para llegar a fin de mes."
+                "Atención: Tu ritmo actual supera en un $ratio% la cuota segura diaria. Reduce tu consumo a ${DataFormatters.format(forecast.safeDailyAllowanceMB)}/día para llegar a fin de mes."
             }
 
             Surface(

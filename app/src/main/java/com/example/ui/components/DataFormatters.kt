@@ -11,6 +11,12 @@ object DataFormatters {
     private val compactGbFormat = DecimalFormat("#,##0.0", DecimalFormatSymbols(Locale.getDefault()))
     private val mbFormat = DecimalFormat("#,##0", DecimalFormatSymbols(Locale.getDefault()))
 
+    /**
+     * Formats an amount of MB for display.
+     *
+     * @param forcedUnit When null (the default) the unit is chosen
+     * automatically: MB below 1000, GB above. Pass "MB" to force megabytes.
+     */
     fun format(mb: Double, forcedUnit: String? = null): String {
         return if (forcedUnit == "MB" || (forcedUnit == null && mb < 1000.0)) {
             "${mbFormat.format(mb)} MB"
