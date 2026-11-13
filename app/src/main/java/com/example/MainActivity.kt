@@ -328,8 +328,14 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 onSaveUssdCode = { code ->
                     viewModel.updateUssdCode(targetLineId, code)
                 },
-                onStartAutoConsult = {
-                    viewModel.startUssdConsultation(targetLineId)
+                onStartAutoConsult = { useAccessibility ->
+                    viewModel.startUssdConsultation(targetLineId, useAccessibility)
+                },
+                onEnableAccessibilityFallback = { sessionId ->
+                    viewModel.enableAccessibilityFallback(targetLineId, sessionId)
+                },
+                onApplyAutoReading = { sessionId, text ->
+                    viewModel.applyUssdReading(targetLineId, text, sessionId)
                 },
                 onConfirmReading = { remainingMB, note ->
                     viewModel.recordUssdReading(targetLineId, remainingMB, note)

@@ -112,10 +112,15 @@ class DataForecastViewModel(
     private val _lastAutoReading = MutableStateFlow<UssdAutoReading?>(null)
 
     /** USSD consultation the user started and is still waiting for. */
-    private data class PendingUssd(val lineId: Int, val startedAtMs: Long)
+    private data class PendingUssd(
+        val lineId: Int,
+        val startedAtMs: Long,
+        val sessionId: Long
+    )
 
     @Volatile
     private var pendingUssd: PendingUssd? = null
+    private var nextUssdSessionId = 0L
 
     init {
         viewModelScope.launch {
@@ -140,22 +145,51 @@ class DataForecastViewModel(
     }
 
     /**
-     * Starts an automatic USSD consultation for [lineId]: arms the catcher,
-     * remembers which line is waiting and times out after 90 seconds.
-     * The UI is expected to dial the USSD code right after calling this.
+     * Starts an automatic USSD consultation for [lineId] and returns its
+     * session id. When [armAccessibility] is false the system telephony API is
+     * being tried first; call [enableAccessibilityFallback] if it fails.
+     * The UI is expected to dial the USSD code when no system API is used.
      */
-    fun startUssdConsultation(lineId: Int) {
-        val pending = PendingUssd(lineId, System.currentTimeMillis())
+    fun startUssdConsultation(lineId: Int, armAccessibility: Boolean = true): Long {
+        val pending = PendingUssd(
+            lineId = lineId,
+            startedAtMs = System.currentTimeMillis(),
+            sessionId = ++nextUssdSessionId
+        )
         pendingUssd = pending
         UssdCaptureHolder.clear()
-        UssdCaptureHolder.arm()
+        if (armAccessibility) UssdCaptureHolder.arm() else UssdCaptureHolder.disarm()
         viewModelScope.launch {
             delay(USSD_CONSULTATION_TIMEOUT_MS)
-            if (pendingUssd?.startedAtMs == pending.startedAtMs) {
+            if (pendingUssd?.sessionId == pending.sessionId) {
                 pendingUssd = null
                 UssdCaptureHolder.disarm()
             }
         }
+        return pending.sessionId
+    }
+
+    /**
+     * Switches an in-flight consultation to the accessibility catcher after
+     * the system telephony API reports that it cannot handle the request.
+     */
+    fun enableAccessibilityFallback(lineId: Int, sessionId: Long) {
+        val pending = pendingUssd ?: return
+        if (pending.lineId != lineId || pending.sessionId != sessionId) return
+        UssdCaptureHolder.clear()
+        UssdCaptureHolder.arm()
+    }
+
+    /**
+     * Applies a response received directly from the system telephony API.
+     * Stale callbacks from previous consultations are ignored.
+     */
+    fun applyUssdReading(lineId: Int, text: String, sessionId: Long) {
+        val pending = pendingUssd ?: return
+        if (pending.lineId != lineId || pending.sessionId != sessionId) return
+        pendingUssd = null
+        UssdCaptureHolder.disarm()
+        viewModelScope.launch { applyUssdCapture(lineId, text) }
     }
 
     /** Parses and saves a captured USSD response onto its line. */

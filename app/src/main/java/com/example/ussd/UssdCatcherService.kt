@@ -9,11 +9,12 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.example.domain.UssdParser
 
 /**
- * Accessibility service that reads the carrier's USSD response dialog.
+ * Accessibility fallback that reads the carrier's USSD response dialog when
+ * [UssdSystemApi] is unavailable or rejected by the operator.
  *
- * This is the only mechanism Android offers to third-party apps to read USSD
- * responses (TelephonyManager.sendUssdRequest is restricted to the default
- * dialer / carrier-privileged apps).
+ * Android only allows third-party apps to read USSD responses through the
+ * accessibility window tree; the official TelephonyManager API is tried first
+ * (see [UssdSystemApi]).
  *
  * It only inspects windows while a consultation is pending
  * (see [UssdCaptureHolder.consultationActive]) and only keeps text that

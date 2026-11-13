@@ -27,13 +27,14 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
 - **Estimación por actividad**: cuántos minutos/día de video HD, redes
   sociales, música o WhatsApp puedes permitirte.
 - **Lecturas USSD automáticas**: guarda tu código USSD por operador, márcalo
-  con un toque (la app disca directo con permiso de llamada) y el lector de
-  respuestas captura el texto del operador, detecta el saldo (GB/MB, con coma
-  o punto: "4.2 GB", "2,5GB", "10 gigas", "850 megas"...) y en la línea
-  prepago también los días restantes ("le quedan 20 días", "válido hasta
-  25/11"), actualizando el día del ciclo automáticamente. El lector usa un
-  servicio de accesibilidad que solo lee la pantalla durante la consulta.
-  Todo sigue disponible a mano como respaldo.
+  con un toque (la app consulta directamente con permiso de llamada) y deja
+  que la app capture la respuesta del operador. En Android 8+ se usa la API
+  oficial de telefonía; si el operador la bloquea, el lector de accesibilidad
+  queda como respaldo y solo lee la pantalla durante la consulta. El texto se
+  interpreta automáticamente, detecta el saldo (GB/MB, con coma o punto:
+  "4.2 GB", "2,5GB", "10 gigas", "850 megas"...) y en la línea prepago también
+  los días restantes ("le quedan 20 días", "válido hasta 25/11"), actualizando
+  el día del ciclo automáticamente. Todo sigue disponible a mano como respaldo.
 - **Historial de lecturas** por línea, con notas, editable manualmente.
 - **Persistencia local** con Room (sin cuentas, sin servicios externos).
 

@@ -70,6 +70,7 @@ import com.example.domain.UssdParser
 import com.example.ui.theme.StatusSuccess
 import com.example.ui.viewmodel.UssdAutoReading
 import com.example.ussd.UssdCatcherService
+import com.example.ussd.UssdSystemApi
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -83,12 +84,16 @@ fun UssdReadingDialog(
     autoReading: UssdAutoReading?,
     onDismiss: () -> Unit,
     onSaveUssdCode: (String) -> Unit,
-    onStartAutoConsult: () -> Unit,
+    onStartAutoConsult: (useAccessibility: Boolean) -> Long,
+    onEnableAccessibilityFallback: (sessionId: Long) -> Unit,
+    onApplyAutoReading: (sessionId: Long, text: String) -> Unit,
     onConfirmReading: (remainingMB: Double, note: String) -> Unit
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val systemApiAvailable = remember(context) { UssdSystemApi.isAvailable(context) }
+    var dialogActive by remember { mutableStateOf(true) }
 
     var ussdCodeText by remember(currentUssdCode) { mutableStateOf(currentUssdCode) }
     var inputText by remember { mutableStateOf("") }
@@ -105,7 +110,10 @@ fun UssdReadingDialog(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            dialogActive = false
+        }
     }
 
     val parsedBalance = remember(inputText, manualUnit) {
@@ -129,23 +137,96 @@ fun UssdReadingDialog(
         }
     }
 
+    fun hasCallPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.CALL_PHONE
+        ) == PackageManager.PERMISSION_GRANTED
+
+    fun openAccessibilitySettings() {
+        try {
+            context.startActivity(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: Exception) {
+            Toast.makeText(context, "No se pudo abrir la configuración", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // The official telephony API is preferred. If it is unavailable, fails,
+    // times out, or returns something unparseable, arm the accessibility
+    // catcher and open the dialer as the old fallback.
+    fun fallbackToAccessibility(sessionId: Long) {
+        if (!dialogActive) return
+        onEnableAccessibilityFallback(sessionId)
+        Toast.makeText(
+            context,
+            "La lectura automática no está disponible; usando el marcador.",
+            Toast.LENGTH_SHORT
+        ).show()
+        dialUssd(ussdCodeText, directCall = hasCallPermission())
+    }
+
+    fun startSystemApiAttempt() {
+        val sessionId = onStartAutoConsult(false)
+        val started = UssdSystemApi.request(context, ussdCodeText) { result ->
+            if (!dialogActive) return@request
+            when (result) {
+                is UssdSystemApi.Result.Success -> {
+                    val text = result.response
+                    val hasReadableData =
+                        UssdParser.parseDataBalanceMB(text) != null ||
+                            (lineId == 2 && UssdParser.parseDaysRemaining(text) != null)
+                    if (hasReadableData) {
+                        onApplyAutoReading(sessionId, text)
+                    } else {
+                        fallbackToAccessibility(sessionId)
+                    }
+                }
+
+                is UssdSystemApi.Result.Failure,
+                UssdSystemApi.Result.Timeout -> fallbackToAccessibility(sessionId)
+            }
+        }
+        if (!started) fallbackToAccessibility(sessionId)
+    }
+
+    fun startAccessibilityAttempt(directCall: Boolean) {
+        onStartAutoConsult(true)
+        dialUssd(ussdCodeText, directCall)
+    }
+
+    var pendingSystemApiAttempt by remember { mutableStateOf(false) }
+
     // ACTION_CALL dials the USSD code right away; without the permission it
     // falls back to ACTION_DIAL (the user presses "call" manually).
     val callPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        dialUssd(ussdCodeText, directCall = granted)
+        if (pendingSystemApiAttempt) {
+            if (granted) {
+                startSystemApiAttempt()
+            } else {
+                startAccessibilityAttempt(directCall = false)
+            }
+        } else {
+            startAccessibilityAttempt(directCall = granted)
+        }
     }
 
     fun onMarkAndReadClick() {
-        onStartAutoConsult()
-        val granted = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.CALL_PHONE
-        ) == PackageManager.PERMISSION_GRANTED
-        if (granted) {
-            dialUssd(ussdCodeText, directCall = true)
-        } else {
-            callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+        val granted = hasCallPermission()
+        when {
+            systemApiAvailable && granted -> startSystemApiAttempt()
+            systemApiAvailable -> {
+                pendingSystemApiAttempt = true
+                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+            }
+            granted -> startAccessibilityAttempt(directCall = true)
+            else -> {
+                pendingSystemApiAttempt = false
+                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+            }
         }
     }
 
@@ -211,7 +292,7 @@ fun UssdReadingDialog(
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                if (catcherEnabled) {
+                if (systemApiAvailable) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = StatusSuccess.copy(alpha = 0.12f),
@@ -229,7 +310,49 @@ fun UssdReadingDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Lectura automática activada: la respuesta del operador se registrará sola y el diálogo se cerrará solo.",
+                                text = "Lectura automática mediante la API de telefonía del sistema." +
+                                    if (catcherEnabled) {
+                                        " El lector de accesibilidad queda como respaldo."
+                                    } else {
+                                        " Si el operador la bloquea, podrás pegar la respuesta manualmente."
+                                    },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (!catcherEnabled) {
+                        TextButton(
+                            onClick = { openAccessibilitySettings() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Activar lector de accesibilidad como respaldo",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                } else if (catcherEnabled) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = StatusSuccess.copy(alpha = 0.12f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = StatusSuccess,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Lectura automática activada: la respuesta del operador se registrará sola.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -255,16 +378,7 @@ fun UssdReadingDialog(
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedButton(
-                                onClick = {
-                                    try {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        )
-                                    } catch (_: Exception) {
-                                        Toast.makeText(context, "No se pudo abrir la configuración", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
+                                onClick = { openAccessibilitySettings() },
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
