@@ -153,7 +153,7 @@ fun UssdReadingDialog(
             return
         }
 
-        if (!hasReadPhonePermission()) {
+        if (!SimInfoProvider.hasPermission(context)) {
             Toast.makeText(
                 context,
                 "Concede el permiso de teléfono para marcar en la SIM elegida; se abrirá el marcador.",
