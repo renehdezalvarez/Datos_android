@@ -48,3 +48,13 @@ Single-module Android app (Kotlin + Jetpack Compose) that forecasts mobile-data 
 - Tag pushes like `vX.Y` publish a GitHub Release with the signed APK. Before tagging, bump `versionCode` and `versionName` in `app/build.gradle.kts`.
 - The stable upload signing config is required for in-place updates. Do not remove or modify the `signingConfigs` blocks or the `upload` alias.
 - Never commit APKs, AABs, `.jks`, or `debug.keystore`; distribute builds through GitHub Releases. `PrepaidExpiryWorker` relies on its keep rule in `app/proguard-rules.pro` — update that rule if the worker is moved or renamed.
+
+### Mandatory release flow for every functional change
+
+1. Bump `versionCode` and `versionName` in `app/build.gradle.kts` (for example `17` / `"8.9"`).
+2. Commit the code and docs and push `main` to `origin`.
+3. Wait for the `main` CI run to finish successfully before tagging. If it fails, fix it and push again.
+4. Create and push the matching tag (`versionName = "8.9"` → tag `v8.9.0`). The tag push builds, tests and publishes the GitHub Release with the signed APK.
+5. Wait for the tag CI run to finish and confirm the release asset exists.
+6. Download the released APK to `~/storage/downloads` (`/storage/emulated/0/Download`) and verify it is a valid, non-empty APK.
+7. Do not tag a revision that has not passed CI. Documentation-only commits do not require a release.
