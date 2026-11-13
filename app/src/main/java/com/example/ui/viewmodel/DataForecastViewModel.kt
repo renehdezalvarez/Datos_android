@@ -499,6 +499,19 @@ class DataForecastViewModel(
         }
     }
 
+    /**
+     * Stores the physical SIM slot (0-based) that should answer the USSD
+     * consultation for [lineId]. Null means "system default".
+     */
+    fun updateSimSlot(lineId: Int, simSlotIndex: Int?) {
+        viewModelScope.launch {
+            val current = repository.getDataPlan(lineId).firstOrNull() ?: return@launch
+            repository.saveOrUpdatePlan(
+                current.copy(simSlotIndex = simSlotIndex?.takeIf { it >= 0 })
+            )
+        }
+    }
+
     fun recordUssdReading(lineId: Int, remainingMB: Double, note: String = "Lectura por USSD") {
         viewModelScope.launch {
             val current = repository.getDataPlan(lineId).firstOrNull() ?: return@launch

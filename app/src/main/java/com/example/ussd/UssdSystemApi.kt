@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicBoolean
@@ -38,7 +39,9 @@ object UssdSystemApi {
     /**
      * Starts a USSD request. Returns false when the request could not be
      * started at all; [callback] is then never invoked. The caller must hold
-     * `CALL_PHONE` (the UI requests it before calling this).
+     * `CALL_PHONE` (the UI requests it before calling this). When
+     * [subscriptionId] is provided, the request is sent through that SIM;
+     * null keeps the system default subscription.
      *
      * The callback always runs on the main thread and is invoked at most once:
      * with the response, a failure code, or [Result.Timeout].
@@ -47,6 +50,7 @@ object UssdSystemApi {
     fun request(
         context: Context,
         code: String,
+        subscriptionId: Int? = null,
         callback: (Result) -> Unit
     ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
@@ -58,8 +62,16 @@ object UssdSystemApi {
         ) {
             return false
         }
-        val telephonyManager = context.getSystemService(TelephonyManager::class.java)
+        val baseTelephonyManager = context.getSystemService(TelephonyManager::class.java)
             ?: return false
+        val telephonyManager = if (subscriptionId != null) {
+            if (!SubscriptionManager.isValidSubscriptionId(subscriptionId)) return false
+            runCatching {
+                baseTelephonyManager.createForSubscriptionId(subscriptionId)
+            }.getOrNull() ?: return false
+        } else {
+            baseTelephonyManager
+        }
         val handler = Handler(Looper.getMainLooper())
         val finished = AtomicBoolean(false)
 

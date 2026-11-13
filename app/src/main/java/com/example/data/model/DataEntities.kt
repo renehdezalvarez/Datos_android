@@ -17,7 +17,11 @@ data class DataPlanEntity(
     val planName: String = "Paquete 10 GB",
     val planType: String = "MONTHLY", // "MONTHLY" or "PREPAID_35"
     val purchaseTimestamp: Long = System.currentTimeMillis(),
-    val ussdCode: String = "*111#"
+    val ussdCode: String = "*111#",
+    // 0-based SIM slot used to query this line's balance. Null means "use
+    // the system default subscription", which is what users had before the
+    // selector existed and is still useful on single-SIM devices.
+    val simSlotIndex: Int? = null
 )
 
 @Entity(tableName = "data_balance_logs")

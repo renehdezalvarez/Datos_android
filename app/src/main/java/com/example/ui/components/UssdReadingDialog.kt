@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Bundle
 import android.provider.Settings
+import android.telecom.TelecomManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -69,6 +71,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.example.domain.UssdParser
 import com.example.ui.theme.StatusSuccess
 import com.example.ui.viewmodel.UssdAutoReading
+import com.example.ussd.SimInfoProvider
 import com.example.ussd.UssdCatcherService
 import com.example.ussd.UssdSystemApi
 
@@ -81,9 +84,11 @@ fun UssdReadingDialog(
     packageTotalMB: Double,
     totalCycleDays: Int,
     displayUnit: String,
+    selectedSimSlot: Int?,
     autoReading: UssdAutoReading?,
     onDismiss: () -> Unit,
     onSaveUssdCode: (String) -> Unit,
+    onSelectSim: (Int?) -> Unit,
     onStartAutoConsult: (useAccessibility: Boolean) -> Long,
     onEnableAccessibilityFallback: (sessionId: Long) -> Unit,
     onApplyAutoReading: (sessionId: Long, text: String) -> Unit,
@@ -124,7 +129,7 @@ fun UssdReadingDialog(
     val dialogOpenMs = remember { System.currentTimeMillis() }
     val latestAutoReading = autoReading?.takeIf { it.lineId == lineId && it.id >= dialogOpenMs }
 
-    fun dialUssd(code: String, directCall: Boolean) {
+    fun openDialIntent(code: String, directCall: Boolean) {
         try {
             val encoded = Uri.encode(code)
             val action = if (directCall) Intent.ACTION_CALL else Intent.ACTION_DIAL
@@ -137,9 +142,57 @@ fun UssdReadingDialog(
         }
     }
 
+    /**
+     * When the user assigned a SIM to this line, place the direct call through
+     * that subscription. Otherwise fall back to the normal ACTION_CALL/DIAL.
+     */
+    fun dialUssd(code: String, directCall: Boolean) {
+        val selectedSlot = selectedSimSlot
+        if (!directCall || selectedSlot == null) {
+            openDialIntent(code, directCall)
+            return
+        }
+
+        if (!hasReadPhonePermission()) {
+            Toast.makeText(
+                context,
+                "Concede el permiso de teléfono para marcar en la SIM elegida; se abrirá el marcador.",
+                Toast.LENGTH_LONG
+            ).show()
+            openDialIntent(code, directCall = false)
+            return
+        }
+
+        val handle = SimInfoProvider.phoneAccountHandleForSlot(context, selectedSlot)
+        val telecomManager = context.getSystemService(TelecomManager::class.java)
+        if (handle != null && telecomManager != null) {
+            try {
+                val extras = Bundle().apply {
+                    putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
+                }
+                telecomManager.placeCall(Uri.parse("tel:${Uri.encode(code)}"), extras)
+                return
+            } catch (_: Exception) {
+                // Fall through to the dialer below.
+            }
+        }
+
+        Toast.makeText(
+            context,
+            "No se pudo marcar directamente en la SIM elegida; selecciónala en el marcador.",
+            Toast.LENGTH_LONG
+        ).show()
+        openDialIntent(code, directCall = false)
+    }
+
     fun hasCallPermission(): Boolean =
         ContextCompat.checkSelfPermission(
             context, Manifest.permission.CALL_PHONE
+        ) == PackageManager.PERMISSION_GRANTED
+
+    fun hasReadPhonePermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_PHONE_STATE
         ) == PackageManager.PERMISSION_GRANTED
 
     fun openAccessibilitySettings() {
@@ -168,8 +221,31 @@ fun UssdReadingDialog(
     }
 
     fun startSystemApiAttempt() {
+        val selectedSlot = selectedSimSlot
+        val subscriptionId = if (selectedSlot != null) {
+            if (!hasReadPhonePermission()) {
+                Toast.makeText(
+                    context,
+                    "Concede el permiso de teléfono para consultar la SIM elegida, o selecciona «Automática».",
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+            SimInfoProvider.subscriptionIdForSlot(context, selectedSlot)
+        } else {
+            null
+        }
+        if (selectedSlot != null && subscriptionId == null) {
+            Toast.makeText(
+                context,
+                "La SIM seleccionada ya no está activa. Elige otra SIM para esta línea.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
         val sessionId = onStartAutoConsult(false)
-        val started = UssdSystemApi.request(context, ussdCodeText) { result ->
+        val started = UssdSystemApi.request(context, ussdCodeText, subscriptionId) { result ->
             if (!dialogActive) return@request
             when (result) {
                 is UssdSystemApi.Result.Success -> {
@@ -198,34 +274,44 @@ fun UssdReadingDialog(
 
     var pendingSystemApiAttempt by remember { mutableStateOf(false) }
 
-    // ACTION_CALL dials the USSD code right away; without the permission it
-    // falls back to ACTION_DIAL (the user presses "call" manually).
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
+    // One dialog can ask for CALL_PHONE and, when a specific SIM is selected,
+    // READ_PHONE_STATE. Without CALL_PHONE we only open the dialer (the user
+    // presses "call" manually).
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val callGranted = grants[Manifest.permission.CALL_PHONE] ?: hasCallPermission()
         if (pendingSystemApiAttempt) {
-            if (granted) {
+            pendingSystemApiAttempt = false
+            if (callGranted) {
                 startSystemApiAttempt()
             } else {
                 startAccessibilityAttempt(directCall = false)
             }
         } else {
-            startAccessibilityAttempt(directCall = granted)
+            startAccessibilityAttempt(directCall = callGranted)
         }
     }
 
     fun onMarkAndReadClick() {
-        val granted = hasCallPermission()
+        val needsReadPhonePermission = systemApiAvailable && selectedSimSlot != null
+        val missingPermissions = buildList {
+            if (!hasCallPermission()) add(Manifest.permission.CALL_PHONE)
+            if (needsReadPhonePermission && !hasReadPhonePermission()) {
+                add(Manifest.permission.READ_PHONE_STATE)
+            }
+        }
+
         when {
-            systemApiAvailable && granted -> startSystemApiAttempt()
+            systemApiAvailable && missingPermissions.isEmpty() -> startSystemApiAttempt()
             systemApiAvailable -> {
                 pendingSystemApiAttempt = true
-                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                permissionsLauncher.launch(missingPermissions.toTypedArray())
             }
-            granted -> startAccessibilityAttempt(directCall = true)
+            hasCallPermission() -> startAccessibilityAttempt(directCall = true)
             else -> {
                 pendingSystemApiAttempt = false
-                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                permissionsLauncher.launch(arrayOf(Manifest.permission.CALL_PHONE))
             }
         }
     }
@@ -284,12 +370,18 @@ fun UssdReadingDialog(
                     modifier = Modifier.fillMaxWidth().testTag("ussd_code_input")
                 )
 
-                // Section 2: Automatic dialing + reading
+                // Section 2: SIM selection + automatic dialing/reading
                 Text(
-                    text = "2. Marcar y leer el saldo",
+                    text = "2. SIM de la línea y lectura del saldo",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
+                )
+
+                SimSelector(
+                    selectedSlotIndex = selectedSimSlot,
+                    onSelect = onSelectSim,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 if (systemApiAvailable) {

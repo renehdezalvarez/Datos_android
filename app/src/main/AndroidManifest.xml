@@ -3,6 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Required to list the active SIMs and map a line to its subscription.
+         It belongs to the same runtime "Phone" group as CALL_PHONE. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application

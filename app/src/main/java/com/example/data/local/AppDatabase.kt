@@ -14,10 +14,10 @@ import com.example.data.model.DataPlanEntity
         DataPlanEntity::class,
         DataBalanceLogEntity::class
     ],
-    version = 6,
+    version = 7,
     // Schemas are not exported: keeping app/schemas in sync from CI builds
-    // is not worth it for this project. New installs get v6 directly and
-    // existing ones migrate 4 -> 5 -> 6 below.
+    // is not worth it for this project. New installs get v7 directly and
+    // existing ones migrate 4 -> 5 -> 6 -> 7 below.
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,6 +44,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v7: each line can remember which physical SIM performs its USSD
+        // consultation. Existing rows start as "system default".
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE data_plan ADD COLUMN simSlotIndex INTEGER")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -51,7 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mobile_data_forecast.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

@@ -17,6 +17,7 @@ Single-module Android app (Kotlin + Jetpack Compose) that forecasts mobile-data 
 ./gradlew assembleRelease
 ```
 
+- **This Termux environment does not build the app locally**: there is no Android SDK (and the local Google Maven endpoint is not usable here). Treat GitHub Actions as the compile/test source of truth: push `main` and wait for CI instead of trying to run Gradle locally.
 - First run downloads Gradle 9.3.1 via the wrapper. CI uses JDK 21 and Android SDK API 36; README says JDK 17+.
 - Debug APK: `app/build/outputs/apk/debug/app-debug.apk`; release APK: `app/build/outputs/apk/release/app-release.apk`.
 - `assembleRelease` requires `KEYSTORE_PATH`, `STORE_PASSWORD`, and `KEY_PASSWORD` (CI injects them). Local debug builds reference a gitignored `debug.keystore` at the repo root; create a standard Android debug keystore there if signing fails.
@@ -36,6 +37,7 @@ Single-module Android app (Kotlin + Jetpack Compose) that forecasts mobile-data 
 ## USSD capture
 
 - Automatic balance reading prefers the official telephony API via `UssdSystemApi` (`TelephonyManager.sendUssdRequest`, Android 8+). It returns the carrier text directly, with a 20-second timeout.
+- Each line persists a 0-based `simSlotIndex` (`DataPlanEntity`); `SimInfoProvider` lists active SIMs and resolves the subscription/phone account. `READ_PHONE_STATE` is required to list SIMs; the same selection is used by `UssdSystemApi` and by the dialer fallback through `TelecomManager`. Null means "system default subscription".
 - When the API is unavailable, throws, times out, or returns unparseable text, the app arms the accessibility catcher and opens the dialer as fallback. The user can always paste the response manually.
 - `UssdCatcherService` only scans windows while `UssdCaptureHolder.consultationActive` is true; that gating is a privacy guarantee, not an optimization. The user must enable the service manually in system settings.
 - Consultations are tracked with a session id (`startUssdConsultation`): stale API callbacks and captures from previous consultations must be ignored via `applyUssdReading`/the pending-session check.

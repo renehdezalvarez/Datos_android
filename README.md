@@ -26,9 +26,14 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
 - **Simulador what-if**: "¿y si consumo X MB al día, me alcanza?"
 - **Estimación por actividad**: cuántos minutos/día de video HD, redes
   sociales, música o WhatsApp puedes permitirte.
-- **Lecturas USSD automáticas**: guarda tu código USSD por operador, márcalo
-  con un toque (la app consulta directamente con permiso de llamada) y deja
-  que la app capture la respuesta del operador. En Android 8+ se usa la API
+- **Lecturas USSD automáticas**: guarda tu código USSD por operador, elige
+  qué SIM corresponde a cada línea y márcalo con un toque (la app consulta
+  directamente con permiso de llamada) para que capture la respuesta del
+  operador. La selección de SIM por línea evita consultar la línea equivocada
+  en teléfonos de doble SIM; se guarda en la base de datos y se usa tanto en
+  la API oficial como en el marcador de respaldo. Para listar las SIM se pide
+  el permiso de teléfono (`READ_PHONE_STATE`), del mismo grupo que el permiso
+  de llamada; si no se concede, se usa la SIM predeterminada del sistema. En Android 8+ se usa la API
   oficial de telefonía; si el operador la bloquea, el lector de accesibilidad
   queda como respaldo y solo lee la pantalla durante la consulta. El texto se
   interpreta automáticamente, detecta el saldo (GB/MB, con coma o punto:

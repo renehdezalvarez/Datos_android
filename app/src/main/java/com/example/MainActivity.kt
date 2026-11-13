@@ -247,6 +247,9 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                         targetLineId = lineId
                         showUssdReadingDialog = true
                     },
+                    onSelectSim = { lineId, simSlotIndex ->
+                        viewModel.updateSimSlot(lineId, simSlotIndex)
+                    },
                     onToggleUnit = { lineId -> viewModel.toggleDisplayUnit(lineId) },
                     onResetToCalendar = { lineId -> viewModel.resetToRealCalendar(lineId) }
                 )
@@ -323,10 +326,14 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 packageTotalMB = currentDialogLine.plan.packageTotalMB,
                 totalCycleDays = currentDialogLine.plan.totalCycleDays,
                 displayUnit = currentDialogLine.displayUnit,
+                selectedSimSlot = currentDialogLine.plan.simSlotIndex,
                 autoReading = state.lastAutoReading?.takeIf { it.lineId == targetLineId },
                 onDismiss = { showUssdReadingDialog = false },
                 onSaveUssdCode = { code ->
                     viewModel.updateUssdCode(targetLineId, code)
+                },
+                onSelectSim = { slot ->
+                    viewModel.updateSimSlot(targetLineId, slot)
                 },
                 onStartAutoConsult = { useAccessibility ->
                     viewModel.startUssdConsultation(targetLineId, useAccessibility)

@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.DataFormatters
+import com.example.ui.components.SimSelector
 import com.example.ui.viewmodel.DataForecastUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +48,7 @@ fun DataSettingsScreen(
     state: DataForecastUiState,
     onOpenConfigurePackage: (lineId: Int) -> Unit,
     onOpenUssdReading: (lineId: Int) -> Unit,
+    onSelectSim: (lineId: Int, simSlotIndex: Int?) -> Unit,
     onToggleUnit: (lineId: Int) -> Unit,
     onResetToCalendar: (lineId: Int) -> Unit,
     modifier: Modifier = Modifier
@@ -173,6 +175,14 @@ fun DataSettingsScreen(
                                 Text("Lectura USSD")
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        SimSelector(
+                            selectedSlotIndex = state.line1.plan.simSlotIndex,
+                            onSelect = { onSelectSim(1, it) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -274,6 +284,14 @@ fun DataSettingsScreen(
                                 Text("Lectura USSD")
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        SimSelector(
+                            selectedSlotIndex = state.line2.plan.simSlotIndex,
+                            onSelect = { onSelectSim(2, it) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
