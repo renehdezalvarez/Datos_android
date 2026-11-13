@@ -49,6 +49,7 @@ import com.example.ui.components.AdjustCycleDaysDialog
 import com.example.ui.components.ConfigurePackageDialog
 import com.example.ui.components.NewPrepaidPurchaseDialog
 import com.example.ui.components.UssdReadingDialog
+import com.example.ui.components.rememberUssdConsultation
 import com.example.ui.screens.DataForecastScreen
 import com.example.ui.screens.DataLogsScreen
 import com.example.ui.screens.DataSettingsScreen
@@ -108,6 +109,39 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
     var showAddLogDialog by remember { mutableStateOf(false) }
     var showNewPurchaseDialog by remember { mutableStateOf(false) }
     var showUssdReadingDialog by remember { mutableStateOf(false) }
+
+    // "Consultar Saldo" en las pantallas principales: consulta y registra el
+    // saldo sola, sin abrir el formulario. El formulario completo queda solo
+    // accesible desde Ajustes.
+    val line1Consult = rememberUssdConsultation(
+        lineId = 1,
+        ussdCode = state.line1.plan.ussdCode,
+        selectedSimSlot = state.line1.plan.simSlotIndex,
+        onStartAutoConsult = { useAccessibility ->
+            viewModel.startUssdConsultation(1, useAccessibility)
+        },
+        onEnableAccessibilityFallback = { sessionId ->
+            viewModel.enableAccessibilityFallback(1, sessionId)
+        },
+        onApplyAutoReading = { sessionId, text ->
+            viewModel.applyUssdReading(1, text, sessionId)
+        }
+    )
+
+    val line2Consult = rememberUssdConsultation(
+        lineId = 2,
+        ussdCode = state.line2.plan.ussdCode,
+        selectedSimSlot = state.line2.plan.simSlotIndex,
+        onStartAutoConsult = { useAccessibility ->
+            viewModel.startUssdConsultation(2, useAccessibility)
+        },
+        onEnableAccessibilityFallback = { sessionId ->
+            viewModel.enableAccessibilityFallback(2, sessionId)
+        },
+        onApplyAutoReading = { sessionId, text ->
+            viewModel.applyUssdReading(2, text, sessionId)
+        }
+    )
 
     if (selectedTab != 0) {
         BackHandler {
@@ -193,6 +227,8 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
             when (selectedTab) {
                 0 -> DataForecastScreen(
                     lineState = state.line1,
+                    onConsultBalance = { line1Consult.start() },
+                    consultingBalance = state.consultingLineId == 1,
                     onOpenConfigurePackage = {
                         targetLineId = 1
                         showConfigurePackageDialog = true
@@ -201,15 +237,13 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                         targetLineId = 1
                         showAdjustDaysDialog = true
                     },
-                    onOpenUssdReading = {
-                        targetLineId = 1
-                        showUssdReadingDialog = true
-                    },
                     onToggleDisplayUnit = { viewModel.toggleDisplayUnit(1) },
                     onSimulateDailyMB = { viewModel.setSimulatedDailyMB(1, it) }
                 )
                 1 -> Prepaid35LineScreen(
                     lineState = state.line2,
+                    onConsultBalance = { line2Consult.start() },
+                    consultingBalance = state.consultingLineId == 2,
                     onOpenConfigurePackage = {
                         targetLineId = 2
                         showConfigurePackageDialog = true
@@ -221,10 +255,6 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                     onOpenNewPurchaseDialog = {
                         targetLineId = 2
                         showNewPurchaseDialog = true
-                    },
-                    onOpenUssdReading = {
-                        targetLineId = 2
-                        showUssdReadingDialog = true
                     },
                     onToggleDisplayUnit = { viewModel.toggleDisplayUnit(2) },
                     onSimulateDailyMB = { viewModel.setSimulatedDailyMB(2, it) }

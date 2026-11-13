@@ -37,6 +37,7 @@ Single-module Android app (Kotlin + Jetpack Compose) that forecasts mobile-data 
 ## USSD capture
 
 - Automatic balance reading prefers the official telephony API via `UssdSystemApi` (`TelephonyManager.sendUssdRequest`, Android 8+). It returns the carrier text directly, with a 20-second timeout.
+- `rememberUssdConsultation` (`ui/components/UssdConsultation.kt`) owns the whole flow (permissions, API attempt, accessibility/dialer fallback) and is shared by the "Consultar Saldo" buttons on both line screens and by `UssdReadingDialog`. The buttons run it directly and never open a form; the form is reachable only from Ajustes.
 - Each line persists a 0-based `simSlotIndex` (`DataPlanEntity`); `SimInfoProvider` lists active SIMs and resolves the subscription/phone account. `READ_PHONE_STATE` is required to list SIMs; the same selection is used by `UssdSystemApi` and by the dialer fallback through `TelecomManager`. Null means "system default subscription".
 - When the API is unavailable, throws, times out, or returns unparseable text, the app arms the accessibility catcher and opens the dialer as fallback. The user can always paste the response manually.
 - `UssdCatcherService` only scans windows while `UssdCaptureHolder.consultationActive` is true; that gating is a privacy guarantee, not an optimization. The user must enable the service manually in system settings.

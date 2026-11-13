@@ -26,9 +26,10 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
 - **Simulador what-if**: "¿y si consumo X MB al día, me alcanza?"
 - **Estimación por actividad**: cuántos minutos/día de video HD, redes
   sociales, música o WhatsApp puedes permitirte.
-- **Lecturas USSD automáticas**: guarda tu código USSD por operador, elige
-  qué SIM corresponde a cada línea y márcalo con un toque (la app consulta
-  directamente con permiso de llamada) para que capture la respuesta del
+- **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
+  consulta el operador y actualiza el saldo sin abrir ningún formulario. El
+  código USSD por operador y la SIM de cada línea se configuran una vez; la app
+  consulta directamente con permiso de llamada y captura la respuesta del
   operador. La selección de SIM por línea evita consultar la línea equivocada
   en teléfonos de doble SIM; se guarda en la base de datos y se usa tanto en
   la API oficial como en el marcador de respaldo. Para listar las SIM se pide
@@ -39,7 +40,9 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   interpreta automáticamente, detecta el saldo (GB/MB, con coma o punto:
   "4.2 GB", "2,5GB", "10 gigas", "850 megas"...) y en la línea prepago también
   los días restantes ("le quedan 20 días", "válido hasta 25/11"), actualizando
-  el día del ciclo automáticamente. Todo sigue disponible a mano como respaldo.
+  el día del ciclo automáticamente. El formulario completo (código USSD, SIM,
+  captura manual del texto) está solo en **Ajustes → Lectura USSD**, para
+  cuando quieras pegarlo a mano.
 - **Historial de lecturas** por línea, con notas, editable manualmente.
 - **Persistencia local** con Room (sin cuentas, sin servicios externos).
 

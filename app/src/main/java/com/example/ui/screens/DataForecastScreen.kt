@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -53,9 +54,10 @@ import com.example.ui.viewmodel.SingleLineState
 @Composable
 fun DataForecastScreen(
     lineState: SingleLineState,
+    onConsultBalance: () -> Unit,
+    consultingBalance: Boolean,
     onOpenConfigurePackage: () -> Unit,
     onOpenAdjustDays: () -> Unit,
-    onOpenUssdReading: () -> Unit,
     onToggleDisplayUnit: () -> Unit,
     onSimulateDailyMB: (Double?) -> Unit,
     modifier: Modifier = Modifier
@@ -84,14 +86,22 @@ fun DataForecastScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = onOpenUssdReading,
+                        onClick = onConsultBalance,
+                        enabled = !consultingBalance,
                         modifier = Modifier.testTag("action_top_ussd_button")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Dialpad,
-                            contentDescription = "Lectura por USSD",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        if (consultingBalance) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Dialpad,
+                                contentDescription = "Consultar saldo",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
 
                     FilledTonalButton(
@@ -187,7 +197,8 @@ fun DataForecastScreen(
                 DataHeroCard(
                     forecast = forecast,
                     displayUnit = displayUnit,
-                    onOpenUssdReading = onOpenUssdReading,
+                    onConsultBalance = onConsultBalance,
+                    consultingBalance = consultingBalance,
                     onOpenConfigurePackage = onOpenConfigurePackage
                 )
             }
@@ -320,15 +331,29 @@ fun DataForecastScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
-                        onClick = onOpenUssdReading,
+                        onClick = onConsultBalance,
+                        enabled = !consultingBalance,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("action_ussd_reading")
                     ) {
-                        Icon(Icons.Default.Dialpad, contentDescription = null, modifier = Modifier.size(18.dp))
+                        if (consultingBalance) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.Dialpad, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Consultar Saldo por USSD (${plan.ussdCode})")
+                        Text(
+                            if (consultingBalance) {
+                                "Consultando saldo…"
+                            } else {
+                                "Consultar Saldo por USSD (${plan.ussdCode})"
+                            }
+                        )
                     }
 
                     Row(

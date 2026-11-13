@@ -51,7 +51,9 @@ data class DataForecastUiState(
     val logs: List<DataBalanceLogEntity> = emptyList(),
     val calendarCurrentDay: Int = 1,
     val calendarTotalDays: Int = 30,
-    val lastAutoReading: UssdAutoReading? = null
+    val lastAutoReading: UssdAutoReading? = null,
+    /** Line whose USSD consultation is currently in flight, if any. */
+    val consultingLineId: Int? = null
 )
 
 class DataForecastViewModel(
@@ -111,6 +113,9 @@ class DataForecastViewModel(
 
     private val _lastAutoReading = MutableStateFlow<UssdAutoReading?>(null)
 
+    /** Line with a consultation in flight (drives the button progress state). */
+    private val _consultingLineId = MutableStateFlow<Int?>(null)
+
     /** USSD consultation the user started and is still waiting for. */
     private data class PendingUssd(
         val lineId: Int,
@@ -159,11 +164,15 @@ class DataForecastViewModel(
         pendingUssd = pending
         UssdCaptureHolder.clear()
         if (armAccessibility) UssdCaptureHolder.arm() else UssdCaptureHolder.disarm()
+        // Only the automatic API wait is shown as progress; once the dialer /
+        // accessibility fallback takes over, the UI goes back to idle.
+        if (!armAccessibility) _consultingLineId.value = lineId
         viewModelScope.launch {
             delay(USSD_CONSULTATION_TIMEOUT_MS)
             if (pendingUssd?.sessionId == pending.sessionId) {
                 pendingUssd = null
                 UssdCaptureHolder.disarm()
+                _consultingLineId.compareAndSet(lineId, null)
             }
         }
         return pending.sessionId
@@ -178,6 +187,8 @@ class DataForecastViewModel(
         if (pending.lineId != lineId || pending.sessionId != sessionId) return
         UssdCaptureHolder.clear()
         UssdCaptureHolder.arm()
+        // The automatic attempt is over: the dialer is now in charge.
+        _consultingLineId.compareAndSet(lineId, null)
     }
 
     /**
@@ -197,6 +208,7 @@ class DataForecastViewModel(
         val mb = UssdParser.parseDataBalanceMB(text)
         val daysRemaining = UssdParser.parseDaysRemaining(text)
         if (mb == null && daysRemaining == null) return
+        _consultingLineId.compareAndSet(lineId, null)
 
         val current = repository.getDataPlan(lineId).firstOrNull() ?: return
         var updated = current
@@ -242,9 +254,13 @@ class DataForecastViewModel(
         repository.getDataPlan(2),
         repository.getAllLogs(),
         _lastAutoReading,
-        combine(_simulatedDailyMBLine1, _simulatedDailyMBLine2) { s1, s2 -> Pair(s1, s2) }
+        combine(_simulatedDailyMBLine1, _simulatedDailyMBLine2, _consultingLineId) { s1, s2, consulting ->
+            Triple(s1, s2, consulting)
+        }
     ) { p1, p2, logs, lastAutoReading, simulations ->
-        val (sim1, sim2) = simulations
+        val sim1 = simulations.first
+        val sim2 = simulations.second
+        val consultingLineId = simulations.third
         val plan1 = p1 ?: DataPlanEntity(id = 1, totalCycleDays = currentMonthTotalDays())
         val plan2 = p2 ?: DataPlanEntity(id = 2, totalCycleDays = 35, packageTotalMB = 6144.0, remainingBalanceMB = 6144.0, planType = PREPAID_PLAN_TYPE, operatorName = "Línea 2 (Prepago)")
 
@@ -310,7 +326,8 @@ class DataForecastViewModel(
             logs = logs,
             calendarCurrentDay = currentDayOfMonth(),
             calendarTotalDays = currentMonthTotalDays(),
-            lastAutoReading = lastAutoReading
+            lastAutoReading = lastAutoReading,
+            consultingLineId = consultingLineId
         )
     }.stateIn(
         scope = viewModelScope,

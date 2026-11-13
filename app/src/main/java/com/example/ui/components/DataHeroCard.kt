@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,7 +57,8 @@ import com.example.ui.theme.StatusWarningContainer
 fun DataHeroCard(
     forecast: DataForecastResult,
     displayUnit: String,
-    onOpenUssdReading: () -> Unit,
+    onConsultBalance: () -> Unit,
+    consultingBalance: Boolean = false,
     onOpenConfigurePackage: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -216,18 +218,29 @@ fun DataHeroCard(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilledTonalButton(
-                            onClick = onOpenUssdReading,
+                            onClick = onConsultBalance,
+                            enabled = !consultingBalance,
                             shape = RoundedCornerShape(12.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.testTag("update_balance_button")
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Dialpad,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp)
-                            )
+                            if (consultingBalance) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Dialpad,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Consultar Saldo", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                text = if (consultingBalance) "Consultando…" else "Consultar Saldo",
+                                style = MaterialTheme.typography.labelMedium
+                            )
                         }
 
                         if (onOpenConfigurePackage != null) {
