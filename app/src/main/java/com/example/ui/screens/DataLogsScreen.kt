@@ -357,15 +357,15 @@ private fun DailyConsumptionCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                val consumedText = if (entry.consumedMB > 0.0) "Consumido: ${DataFormatters.format(entry.consumedMB, displayUnit)}" else "Sin consumo registrado"
-                val addedText = if (entry.addedMB > 0.0) " · Recarga/Ajuste: +${DataFormatters.format(entry.addedMB, displayUnit)}" else ""
+                val consumedText = if (entry.consumedMB > 0.0) "Consumido: ${DataFormatters.format(entry.consumedMB, "MB")}" else "Sin consumo registrado"
+                val addedText = if (entry.addedMB > 0.0) " · Recarga/Ajuste: +${DataFormatters.format(entry.addedMB, "MB")}" else ""
                 Text(
                     text = consumedText + addedText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Saldo al cierre: ${DataFormatters.format(entry.endOfDayRemainingMB, displayUnit)} · ${entry.readingsCount} lectura(s)",
+                    text = "Saldo al cierre: ${DataFormatters.format(entry.endOfDayRemainingMB, "MB")} · ${entry.readingsCount} lectura(s)",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
