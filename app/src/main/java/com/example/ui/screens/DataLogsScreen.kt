@@ -32,7 +32,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -50,8 +52,67 @@ import com.example.data.model.DataBalanceLogEntity
 import com.example.ui.components.DataFormatters
 import com.example.ui.viewmodel.DataForecastUiState
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
+
+private data class DailyConsumptionEntry(
+    val dayKey: Long,
+    val planId: Int,
+    val dateLabel: String,
+    val consumedMB: Double,
+    val addedMB: Double,
+    val endOfDayRemainingMB: Double,
+    val readingsCount: Int
+)
+
+private fun dayStartMillis(timestamp: Long): Long {
+    val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    return cal.timeInMillis
+}
+
+private fun computeDailyConsumption(
+    logs: List<DataBalanceLogEntity>,
+    selectedLineId: Int
+): List<DailyConsumptionEntry> {
+    val relevant = if (selectedLineId == 0) logs else logs.filter { it.planId == selectedLineId }
+    if (relevant.isEmpty()) return emptyList()
+    val byPlanAsc = relevant.groupBy { it.planId }.mapValues { (_, v) -> v.sortedBy { it.timestamp } }
+    val dayFmt = SimpleDateFormat("EEE dd MMM yyyy", Locale("es", "ES"))
+    val accum = linkedMapOf<String, DailyConsumptionEntry>()
+
+    byPlanAsc.forEach { (planId, planLogs) ->
+        var prevRemaining: Double? = null
+        planLogs.forEach { log ->
+            val start = dayStartMillis(log.timestamp)
+            val key = "$planId-$start"
+            val prev = accum[key]
+            val deltaPrev = prevRemaining
+            var consumed = prev?.consumedMB ?: 0.0
+            var added = prev?.addedMB ?: 0.0
+            if (deltaPrev != null) {
+                val delta = deltaPrev - log.remainingMB
+                if (delta > 0.0) consumed += delta else if (delta < 0.0) added += -delta
+            }
+            accum[key] = DailyConsumptionEntry(
+                dayKey = start,
+                planId = planId,
+                dateLabel = dayFmt.format(Date(start)).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("es", "ES")) else it.toString() },
+                consumedMB = consumed,
+                addedMB = added,
+                endOfDayRemainingMB = log.remainingMB,
+                readingsCount = (prev?.readingsCount ?: 0) + 1
+            )
+            prevRemaining = log.remainingMB
+        }
+    }
+    return accum.values.sortedWith(compareByDescending<DailyConsumptionEntry> { it.dayKey }.thenBy { it.planId })
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +124,7 @@ fun DataLogsScreen(
 ) {
     val dateFormat = SimpleDateFormat("dd MMM, HH:mm", Locale("es", "ES"))
     var selectedFilterLineId by remember { mutableIntStateOf(0) } // 0 = all, 1 = Line 1, 2 = Line 2
+    var viewMode by remember { mutableIntStateOf(0) } // 0 = readings, 1 = daily consumption
 
     val filteredLogs = remember(state.logs, selectedFilterLineId) {
         if (selectedFilterLineId == 0) {
@@ -70,6 +132,9 @@ fun DataLogsScreen(
         } else {
             state.logs.filter { it.planId == selectedFilterLineId }
         }
+    }
+    val dailyEntries = remember(state.logs, selectedFilterLineId) {
+        computeDailyConsumption(state.logs, selectedFilterLineId)
     }
 
     Scaffold(
@@ -84,7 +149,7 @@ fun DataLogsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${filteredLogs.size} lecturas registradas",
+                            text = if (viewMode == 0) "${filteredLogs.size} lecturas registradas" else "${dailyEntries.size} días con consumo calculado",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -96,12 +161,14 @@ fun DataLogsScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { onOpenAddLog(if (selectedFilterLineId != 0) selectedFilterLineId else 1) },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Registrar Saldo") },
-                modifier = Modifier.testTag("fab_add_log")
-            )
+            if (viewMode == 0) {
+                ExtendedFloatingActionButton(
+                    onClick = { onOpenAddLog(if (selectedFilterLineId != 0) selectedFilterLineId else 1) },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Registrar Saldo") },
+                    modifier = Modifier.testTag("fab_add_log")
+                )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -109,6 +176,19 @@ fun DataLogsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            SecondaryTabRow(selectedTabIndex = viewMode) {
+                Tab(
+                    selected = viewMode == 0,
+                    onClick = { viewMode = 0 },
+                    text = { Text("Lecturas") }
+                )
+                Tab(
+                    selected = viewMode == 1,
+                    onClick = { viewMode = 1 },
+                    text = { Text("Consumo diario") }
+                )
+            }
+
             // Line Filter Chips
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
@@ -137,58 +217,158 @@ fun DataLogsScreen(
                 }
             }
 
-            if (filteredLogs.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.size(72.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.History,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
+            if (viewMode == 0) {
+                if (filteredLogs.isEmpty()) {
+                    EmptyLogsPlaceholder(
+                        text = "Sin lecturas guardadas",
+                        subtitle = "Registra revisiones periódicas del saldo de tu operador para comprobar cómo desciende tu saldo."
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 80.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(filteredLogs, key = { it.id }) { log ->
+                            val unit = if (log.planId == 2) state.line2.displayUnit else state.line1.displayUnit
+                            LogItemCard(
+                                log = log,
+                                displayUnit = unit,
+                                dateFormat = dateFormat,
+                                onDelete = { onDeleteLog(log.id) }
+                            )
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Sin lecturas guardadas",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Registra revisiones periódicas del saldo de tu operador para comprobar cómo desciende tu saldo.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 80.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(filteredLogs, key = { it.id }) { log ->
-                        val unit = if (log.planId == 2) state.line2.displayUnit else state.line1.displayUnit
-                        LogItemCard(
-                            log = log,
-                            displayUnit = unit,
-                            dateFormat = dateFormat,
-                            onDelete = { onDeleteLog(log.id) }
+                if (dailyEntries.isEmpty()) {
+                    EmptyLogsPlaceholder(
+                        text = "Sin consumo diario calculado",
+                        subtitle = "Se necesitan al menos dos lecturas registradas para calcular el consumo entre lecturas de cada día."
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(dailyEntries, key = { "${it.planId}-${it.dayKey}" }) { entry ->
+                            val unit = if (entry.planId == 2) state.line2.displayUnit else state.line1.displayUnit
+                            DailyConsumptionCard(entry = entry, displayUnit = unit)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyLogsPlaceholder(text: String, subtitle: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(72.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun DailyConsumptionCard(
+    entry: DailyConsumptionEntry,
+    displayUnit: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (entry.planId == 2) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (entry.planId == 2) Icons.Default.SimCard else Icons.Default.DataUsage,
+                        contentDescription = null,
+                        tint = if (entry.planId == 2) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (entry.planId == 2) MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = if (entry.planId == 2) "Línea 2 (Prepago 35d)" else "Línea 1 (Mensual)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (entry.planId == 2) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = entry.dateLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                val consumedText = if (entry.consumedMB > 0.0) "Consumido: ${DataFormatters.format(entry.consumedMB, displayUnit)}" else "Sin consumo registrado"
+                val addedText = if (entry.addedMB > 0.0) " · Recarga/Ajuste: +${DataFormatters.format(entry.addedMB, displayUnit)}" else ""
+                Text(
+                    text = consumedText + addedText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Saldo al cierre: ${DataFormatters.format(entry.endOfDayRemainingMB, displayUnit)} · ${entry.readingsCount} lectura(s)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

@@ -203,6 +203,15 @@ class DataForecastViewModel(
         viewModelScope.launch { applyUssdCapture(lineId, text) }
     }
 
+    /** Cancels an in-flight consultation (e.g. silent auto-read that cannot proceed). */
+    fun cancelUssdConsultation(lineId: Int, sessionId: Long) {
+        val pending = pendingUssd ?: return
+        if (pending.lineId != lineId || pending.sessionId != sessionId) return
+        pendingUssd = null
+        UssdCaptureHolder.disarm()
+        _consultingLineId.compareAndSet(lineId, null)
+    }
+
     /** Parses and saves a captured USSD response onto its line. */
     private suspend fun applyUssdCapture(lineId: Int, text: String) {
         val mb = UssdParser.parseDataBalanceMB(text)

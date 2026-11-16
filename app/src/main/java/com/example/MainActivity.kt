@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.domain.UssdParser
 import com.example.notifications.PrepaidExpiryWorker
 import com.example.data.local.AppDatabase
 import com.example.data.repository.DataPlanRepository
@@ -56,6 +57,9 @@ import com.example.ui.screens.DataSettingsScreen
 import com.example.ui.screens.Prepaid35LineScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.DataForecastViewModel
+import com.example.ussd.SimInfoProvider
+import com.example.ussd.UssdSystemApi
+import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,6 +104,7 @@ fun RequestNotificationPermissionIfNeeded() {
 @Composable
 fun MainDataContent(viewModel: DataForecastViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var targetLineId by rememberSaveable { mutableIntStateOf(1) }
@@ -109,6 +114,84 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
     var showAddLogDialog by remember { mutableStateOf(false) }
     var showNewPurchaseDialog by remember { mutableStateOf(false) }
     var showUssdReadingDialog by remember { mutableStateOf(false) }
+    var autoReadAttempted by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(autoReadAttempted) {
+        if (autoReadAttempted) return@LaunchedEffect
+        // Espera breve para que Room emita planes y lecturas iniciales.
+        kotlinx.coroutines.delay(1200)
+        autoReadAttempted = true
+
+        fun hasReadingToday(current: com.example.ui.viewmodel.DataForecastUiState, lineId: Int): Boolean {
+            val startOfToday = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            return current.logs.any { it.planId == lineId && it.timestamp >= startOfToday }
+        }
+
+        suspend fun waitUntilIdle(maxMs: Long = 25_000L) {
+            val start = System.currentTimeMillis()
+            while (viewModel.uiState.value.consultingLineId != null &&
+                System.currentTimeMillis() - start < maxMs
+            ) {
+                kotlinx.coroutines.delay(300)
+            }
+        }
+
+        fun trySilentAutoRead(
+            current: com.example.ui.viewmodel.DataForecastUiState,
+            lineId: Int,
+            ussdCode: String,
+            selectedSimSlot: Int?
+        ): Boolean {
+            if (hasReadingToday(current, lineId)) return false
+            if (ussdCode.isBlank()) return false
+            if (viewModel.uiState.value.consultingLineId != null) return false
+            if (!UssdSystemApi.isAvailable(context)) return false
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) return false
+
+            val subscriptionId = if (selectedSimSlot != null) {
+                if (!SimInfoProvider.hasPermission(context)) return false
+                SimInfoProvider.subscriptionIdForSlot(context, selectedSimSlot) ?: return false
+            } else {
+                null
+            }
+
+            val sessionId = viewModel.startUssdConsultation(lineId, armAccessibility = false)
+            val started = UssdSystemApi.request(context, ussdCode, subscriptionId) { result ->
+                when (result) {
+                    is UssdSystemApi.Result.Success -> {
+                        val text = result.response
+                        val hasReadableData =
+                            UssdParser.parseDataBalanceMB(text) != null ||
+                                (lineId == 2 && UssdParser.parseDaysRemaining(text) != null)
+                        if (hasReadableData) {
+                            viewModel.applyUssdReading(lineId, text, sessionId)
+                        } else {
+                            viewModel.cancelUssdConsultation(lineId, sessionId)
+                        }
+                    }
+                    is UssdSystemApi.Result.Failure,
+                    UssdSystemApi.Result.Timeout -> viewModel.cancelUssdConsultation(lineId, sessionId)
+                }
+            }
+            if (!started) {
+                viewModel.cancelUssdConsultation(lineId, sessionId)
+                return false
+            }
+            return true
+        }
+
+        // Lectura automática silenciosa al abrir: solo líneas sin lectura hoy.
+        val current = viewModel.uiState.value
+        val started1 = trySilentAutoRead(current, 1, current.line1.plan.ussdCode, current.line1.plan.simSlotIndex)
+        if (started1) waitUntilIdle()
+        val current2 = viewModel.uiState.value
+        trySilentAutoRead(current2, 2, current2.line2.plan.ussdCode, current2.line2.plan.simSlotIndex)
+    }
 
     // "Consultar Saldo" en las pantallas principales: consulta y registra el
     // saldo sola, sin abrir el formulario. El formulario completo queda solo

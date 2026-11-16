@@ -43,7 +43,13 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   el día del ciclo automáticamente. El formulario completo (código USSD, SIM,
   captura manual del texto) está solo en **Ajustes → Lectura USSD**, para
   cuando quieras pegarlo a mano.
-- **Historial de lecturas** por línea, con notas, editable manualmente.
+- **Lectura automática al abrir**: al iniciar la app, si una línea no tiene
+  lecturas registradas en el día actual, se intenta una consulta automática
+  silenciosa por la API oficial de telefonía (solo cuando los permisos y la SIM
+  configurada lo permiten, sin abrir el marcador).
+- **Historial de lecturas y consumo diario** por línea: lecturas con notas
+  (editables/eliminables) y una vista de **consumo diario** calculada a partir
+  de las diferencias entre lecturas registradas cada día.
 - **Persistencia local** con Room (sin cuentas, sin servicios externos).
 
 ## 🏗️ Arquitectura
