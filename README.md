@@ -24,8 +24,6 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
 - **Semáforo de riesgo**: `Sobrante`, `En ritmo`, `Riesgo de agotarse`,
   `Crítico`.
 - **Simulador what-if**: "¿y si consumo X MB al día, me alcanza?"
-- **Estimación por actividad**: cuántos minutos/día de video HD, redes
-  sociales, música o WhatsApp puedes permitirte.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El
   código USSD por operador y la SIM de cada línea se configuran una vez; la app

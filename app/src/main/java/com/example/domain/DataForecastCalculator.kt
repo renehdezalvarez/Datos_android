@@ -3,7 +3,6 @@ package com.example.domain
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 enum class DataPaceStatus {
     SURPLUS_SAFE,       // Will comfortably reach month-end (> 20% remaining at end)
@@ -11,14 +10,6 @@ enum class DataPaceStatus {
     RISK_EXHAUSTION,   // Will run out 1 to 5 days before month-end
     CRITICAL_DEPLETED  // Will run out quickly (> 5 days before month-end) or already depleted
 }
-
-data class DataActivityAllowance(
-    val title: String,
-    val iconType: String,
-    val mbPerHour: Double,
-    val hoursAvailableTotal: Double,
-    val minutesPerDayRemaining: Int
-)
 
 data class DataForecastResult(
     val packageTotalMB: Double,
@@ -40,8 +31,7 @@ data class DataForecastResult(
     val paceStatus: DataPaceStatus,
     val simulatedDailyMB: Double? = null,
     val simulatedDaysLeft: Double? = null,
-    val simulatedEndBalanceMB: Double? = null,
-    val activities: List<DataActivityAllowance> = emptyList()
+    val simulatedEndBalanceMB: Double? = null
 )
 
 object DataForecastCalculator {
@@ -129,38 +119,6 @@ object DataForecastCalculator {
             Pair(null, null)
         }
 
-        // Estimación de actividades con el saldo restante y cuota diaria
-        val activities = listOf(
-            DataActivityAllowance(
-                title = "Video HD (YouTube / Netflix)",
-                iconType = "video",
-                mbPerHour = 1500.0,
-                hoursAvailableTotal = safeRemainingMB / 1500.0,
-                minutesPerDayRemaining = if (futureDays > 0) ((safeDailyAllowanceMB / 1500.0) * 60).roundToInt() else 0
-            ),
-            DataActivityAllowance(
-                title = "Redes Sociales (TikTok / Reels / IG)",
-                iconType = "social",
-                mbPerHour = 250.0,
-                hoursAvailableTotal = safeRemainingMB / 250.0,
-                minutesPerDayRemaining = if (futureDays > 0) ((safeDailyAllowanceMB / 250.0) * 60).roundToInt() else 0
-            ),
-            DataActivityAllowance(
-                title = "Música Online (Spotify / Deezer)",
-                iconType = "music",
-                mbPerHour = 60.0,
-                hoursAvailableTotal = safeRemainingMB / 60.0,
-                minutesPerDayRemaining = if (futureDays > 0) ((safeDailyAllowanceMB / 60.0) * 60).roundToInt() else 0
-            ),
-            DataActivityAllowance(
-                title = "WhatsApp y Navegación Web",
-                iconType = "chat",
-                mbPerHour = 20.0,
-                hoursAvailableTotal = safeRemainingMB / 20.0,
-                minutesPerDayRemaining = if (futureDays > 0) ((safeDailyAllowanceMB / 20.0) * 60).roundToInt() else 0
-            )
-        )
-
         return DataForecastResult(
             packageTotalMB = safePackageMB,
             remainingBalanceMB = safeRemainingMB,
@@ -179,8 +137,7 @@ object DataForecastCalculator {
             paceStatus = paceStatus,
             simulatedDailyMB = simulatedDailyMB,
             simulatedDaysLeft = simDaysLeft,
-            simulatedEndBalanceMB = simEndBalance,
-            activities = activities
+            simulatedEndBalanceMB = simEndBalance
         )
     }
 }

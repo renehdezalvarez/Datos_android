@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import com.example.data.model.DataBalanceLogEntity
 import com.example.ui.components.DailyConsumptionChart
 import com.example.ui.components.consumptionByCycleDay
-import com.example.ui.components.DataActivitiesCard
 import com.example.ui.components.DataFormatters
 import com.example.ui.components.DataHeroCard
 import com.example.ui.components.DataPaceCard
@@ -446,13 +445,6 @@ fun Prepaid35LineScreen(
                         }
                     }
                 }
-            }
-
-            // Activities Equivalent Card
-            item {
-                DataActivitiesCard(
-                    activities = forecast.activities
-                )
             }
 
             // What-If Simulator Card

@@ -73,20 +73,6 @@ class DataForecastCalculatorTest {
     }
 
     @Test
-    fun testDataForecast_activitiesCalculations() {
-        val result = DataForecastCalculator.calculate(
-            packageTotalMB = 10240.0,
-            remainingBalanceMB = 3000.0,
-            totalCycleDays = 30,
-            daysElapsed = 15
-        )
-
-        // HD video uses 1500 MB/hr -> 3000 / 1500 = 2.0 hours
-        val videoActivity = result.activities.first { it.iconType == "video" }
-        assertEquals(2.0, videoActivity.hoursAvailableTotal, 0.001)
-    }
-
-    @Test
     fun testDataForecast_customPackageChange() {
         // Change package from 10 GB to 25 GB (25600 MB) with 18000 MB remaining on Day 10 of 30
         val result = DataForecastCalculator.calculate(
