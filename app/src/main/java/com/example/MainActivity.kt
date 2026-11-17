@@ -310,6 +310,7 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
             when (selectedTab) {
                 0 -> DataForecastScreen(
                     lineState = state.line1,
+                    logs = state.logs,
                     onConsultBalance = { line1Consult.start() },
                     consultingBalance = state.consultingLineId == 1,
                     onOpenConfigurePackage = {
@@ -325,6 +326,7 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 )
                 1 -> Prepaid35LineScreen(
                     lineState = state.line2,
+                    logs = state.logs,
                     onConsultBalance = { line2Consult.start() },
                     consultingBalance = state.consultingLineId == 2,
                     onOpenConfigurePackage = {

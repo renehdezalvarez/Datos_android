@@ -48,6 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.model.DataBalanceLogEntity
+import com.example.ui.components.DailyConsumptionChart
+import com.example.ui.components.consumptionByCycleDay
 import com.example.ui.components.DataActivitiesCard
 import com.example.ui.components.DataFormatters
 import com.example.ui.components.DataHeroCard
@@ -59,6 +62,7 @@ import com.example.ui.viewmodel.SingleLineState
 @Composable
 fun Prepaid35LineScreen(
     lineState: SingleLineState,
+    logs: List<DataBalanceLogEntity>,
     onConsultBalance: () -> Unit,
     consultingBalance: Boolean,
     onOpenConfigurePackage: () -> Unit,
@@ -328,6 +332,19 @@ fun Prepaid35LineScreen(
                 DataPaceCard(
                     forecast = forecast,
                     displayUnit = unit
+                )
+            }
+
+            // Daily consumption over the cycle (MB)
+            item {
+                DailyConsumptionChart(
+                    consumptionByDay = consumptionByCycleDay(
+                        logs = logs,
+                        planId = 2,
+                        totalCycleDays = forecast.totalCycleDays
+                    ),
+                    currentCycleDay = forecast.daysElapsed,
+                    modifier = Modifier.testTag("daily_consumption_chart_line2")
                 )
             }
 

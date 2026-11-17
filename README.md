@@ -50,6 +50,9 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
 - **Historial de lecturas y consumo diario** por línea: lecturas con notas
   (editables/eliminables) y una vista de **consumo diario** calculada a partir
   de las diferencias entre lecturas registradas cada día.
+- **Gráfico de barras de consumo por día del ciclo** en la pantalla principal de
+  cada línea: muestra en MB cuánto se consumió en cada día del ciclo; la última
+  lectura de un día sirve como saldo inicial del día siguiente.
 - **Persistencia local** con Room (sin cuentas, sin servicios externos).
 
 ## 🏗️ Arquitectura
