@@ -42,8 +42,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.domain.UssdParser
+import com.example.notifications.BalanceReadingReminderWorker
 import com.example.notifications.PrepaidExpiryWorker
 import com.example.data.local.AppDatabase
+import com.example.data.model.DataBalanceLogEntity
 import com.example.data.repository.DataPlanRepository
 import com.example.ui.components.AddBalanceLogDialog
 import com.example.ui.components.AdjustCycleDaysDialog
@@ -70,8 +72,9 @@ class MainActivity : ComponentActivity() {
         val repository = DataPlanRepository(database.dataDao())
         val viewModelFactory = DataForecastViewModel.provideFactory(repository)
 
-        // Daily background check of the prepaid package deadline.
+        // Daily background checks: prepaid deadline + missing balance reading.
         PrepaidExpiryWorker.schedule(applicationContext)
+        BalanceReadingReminderWorker.schedule(applicationContext)
 
         setContent {
             MyApplicationTheme {
@@ -83,7 +86,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Asks for POST_NOTIFICATIONS once on Android 13+ (needed by the expiry alert). */
+/** Asks for POST_NOTIFICATIONS once on Android 13+ (expiry + reading reminders). */
 @Composable
 fun RequestNotificationPermissionIfNeeded() {
     val context = LocalContext.current
@@ -99,6 +102,22 @@ fun RequestNotificationPermissionIfNeeded() {
             launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
+}
+
+/** True when [logs] already contains a reading for [lineId] in the local day. */
+private fun hasReadingToday(
+    logs: List<DataBalanceLogEntity>,
+    lineId: Int,
+    nowMillis: Long = System.currentTimeMillis()
+): Boolean {
+    val startOfToday = Calendar.getInstance().apply {
+        timeInMillis = nowMillis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    return logs.any { it.planId == lineId && it.timestamp >= startOfToday }
 }
 
 @Composable
@@ -122,16 +141,6 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
         kotlinx.coroutines.delay(1200)
         autoReadAttempted = true
 
-        fun hasReadingToday(current: com.example.ui.viewmodel.DataForecastUiState, lineId: Int): Boolean {
-            val startOfToday = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
-            return current.logs.any { it.planId == lineId && it.timestamp >= startOfToday }
-        }
-
         suspend fun waitUntilIdle(maxMs: Long = 25_000L) {
             val start = System.currentTimeMillis()
             while (viewModel.uiState.value.consultingLineId != null &&
@@ -147,7 +156,7 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
             ussdCode: String,
             selectedSimSlot: Int?
         ): Boolean {
-            if (hasReadingToday(current, lineId)) return false
+            if (hasReadingToday(current.logs, lineId)) return false
             if (ussdCode.isBlank()) return false
             if (viewModel.uiState.value.consultingLineId != null) return false
             if (!UssdSystemApi.isAvailable(context)) return false
@@ -191,6 +200,15 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
         if (started1) waitUntilIdle()
         val current2 = viewModel.uiState.value
         trySilentAutoRead(current2, 2, current2.line2.plan.ussdCode, current2.line2.plan.simSlotIndex)
+    }
+
+    // Si ya se registraron las lecturas de hoy, retiramos el recordatorio que
+    // pudiera haber quedado visible de un día anterior o de una consulta hecha
+    // justo después de que sonara el aviso de las 22:00.
+    LaunchedEffect(state.logs) {
+        if (hasReadingToday(state.logs, 1) && hasReadingToday(state.logs, 2)) {
+            BalanceReadingReminderWorker.cancel(context)
+        }
     }
 
     // "Consultar Saldo" en las pantallas principales: consulta y registra el

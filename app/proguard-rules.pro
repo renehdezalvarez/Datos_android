@@ -8,6 +8,9 @@
 -keep class com.example.notifications.PrepaidExpiryWorker {
     public <init>(...);
 }
+-keep class com.example.notifications.BalanceReadingReminderWorker {
+    public <init>(...);
+}
 
 # Keep crash reports readable.
 -keepattributes SourceFile,LineNumberTable

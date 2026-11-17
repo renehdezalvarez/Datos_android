@@ -47,6 +47,11 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   lecturas registradas en el día actual, se intenta una consulta automática
   silenciosa por la API oficial de telefonía (solo cuando los permisos y la SIM
   configurada lo permiten, sin abrir el marcador).
+- **Recordatorio diario de saldo**: a las 22:00, si alguna línea sigue sin
+  lectura registrada en el día, aparece una notificación: *"Consulta tu saldo
+  para afinar el pronóstico"*. El aviso solo abre la app: no marca el código
+  USSD ni activa la captura de accesibilidad en segundo plano. Se retira solo
+  al registrar las lecturas pendientes.
 - **Historial de lecturas y consumo diario** por línea: lecturas con notas
   (editables/eliminables) y una vista de **consumo diario** calculada a partir
   de las diferencias entre lecturas registradas cada día.
