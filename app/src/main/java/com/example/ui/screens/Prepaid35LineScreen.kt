@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.model.DataBalanceLogEntity
+import com.example.domain.PrepaidRecharge
 import com.example.ui.components.DailyConsumptionChart
 import com.example.ui.components.consumptionByCycleDay
 import com.example.ui.components.DataFormatters
@@ -64,6 +65,8 @@ fun Prepaid35LineScreen(
     logs: List<DataBalanceLogEntity>,
     onConsultBalance: () -> Unit,
     consultingBalance: Boolean,
+    onConsultRechargeDate: () -> Unit,
+    consultingRechargeDate: Boolean,
     onOpenConfigurePackage: () -> Unit,
     onOpenAdjustDays: () -> Unit,
     onOpenNewPurchaseDialog: () -> Unit,
@@ -212,6 +215,73 @@ fun Prepaid35LineScreen(
                                 modifier = Modifier.testTag("prepaid_warning_buy_button")
                             ) {
                                 Text("Comprar", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Recharge date reported by the carrier for this prepaid line only.
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("prepaid_recharge_card"),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Event,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Recarga de saldo",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (lineState.rechargeEligibleDateFormatted.isNotBlank()) {
+                                Text(
+                                    text = "Puedes recargar desde el ${lineState.rechargeEligibleDateFormatted}.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "Fecha informada por el operador: ${lineState.rechargeCarrierDateFormatted}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Text(
+                                    text = "Consulta ${PrepaidRecharge.USSD_CODE} una vez por ciclo para saber cuándo puedes recargar.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedButton(
+                            onClick = onConsultRechargeDate,
+                            enabled = !consultingRechargeDate,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("prepaid_recharge_consult_button")
+                        ) {
+                            if (consultingRechargeDate) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Consultar", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }

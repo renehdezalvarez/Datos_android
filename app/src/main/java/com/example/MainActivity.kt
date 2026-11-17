@@ -41,11 +41,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.domain.PrepaidRecharge
 import com.example.domain.UssdParser
 import com.example.notifications.BalanceReadingReminderWorker
 import com.example.notifications.PrepaidExpiryWorker
+import com.example.notifications.RechargeReminderWorker
 import com.example.data.local.AppDatabase
 import com.example.data.model.DataBalanceLogEntity
+import com.example.data.model.DataPlanEntity
 import com.example.data.repository.DataPlanRepository
 import com.example.ui.components.AddBalanceLogDialog
 import com.example.ui.components.AdjustCycleDaysDialog
@@ -72,9 +75,11 @@ class MainActivity : ComponentActivity() {
         val repository = DataPlanRepository(database.dataDao())
         val viewModelFactory = DataForecastViewModel.provideFactory(repository)
 
-        // Daily background checks: prepaid deadline + missing balance reading.
+        // Daily background checks: prepaid deadline + missing balance reading
+        // + prepaid recharge date (09:00 local time).
         PrepaidExpiryWorker.schedule(applicationContext)
         BalanceReadingReminderWorker.schedule(applicationContext)
+        RechargeReminderWorker.schedule(applicationContext)
 
         setContent {
             MyApplicationTheme {
@@ -194,12 +199,58 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
             return true
         }
 
+        suspend fun trySilentRechargeQuery(plan: DataPlanEntity): Boolean {
+            if (!viewModel.needsRechargeQuery(plan)) return false
+            if (viewModel.uiState.value.consultingLineId != null) return false
+            if (!UssdSystemApi.isAvailable(context)) return false
+            if (ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.CALL_PHONE
+                ) != PackageManager.PERMISSION_GRANTED
+            ) return false
+
+            val subscriptionId = if (plan.simSlotIndex != null) {
+                if (!SimInfoProvider.hasPermission(context)) return false
+                SimInfoProvider.subscriptionIdForSlot(context, plan.simSlotIndex) ?: return false
+            } else {
+                null
+            }
+
+            val sessionId = viewModel.startUssdConsultation(2, armAccessibility = false)
+            val started = UssdSystemApi.request(
+                context,
+                PrepaidRecharge.USSD_CODE,
+                subscriptionId
+            ) { result ->
+                when (result) {
+                    is UssdSystemApi.Result.Success -> {
+                        if (UssdParser.parseRechargeDate(result.response) != null) {
+                            viewModel.applyUssdReading(2, result.response, sessionId)
+                        } else {
+                            viewModel.cancelUssdConsultation(2, sessionId)
+                        }
+                    }
+                    is UssdSystemApi.Result.Failure,
+                    UssdSystemApi.Result.Timeout -> viewModel.cancelUssdConsultation(2, sessionId)
+                }
+            }
+            if (!started) {
+                viewModel.cancelUssdConsultation(2, sessionId)
+                return false
+            }
+            return true
+        }
+
         // Lectura automática silenciosa al abrir: solo líneas sin lectura hoy.
         val current = viewModel.uiState.value
         val started1 = trySilentAutoRead(current, 1, current.line1.plan.ussdCode, current.line1.plan.simSlotIndex)
         if (started1) waitUntilIdle()
         val current2 = viewModel.uiState.value
-        trySilentAutoRead(current2, 2, current2.line2.plan.ussdCode, current2.line2.plan.simSlotIndex)
+        val started2 = trySilentAutoRead(current2, 2, current2.line2.plan.ussdCode, current2.line2.plan.simSlotIndex)
+        if (started2) waitUntilIdle()
+
+        // Prepaid only: one silent *222*732# query per purchase cycle.
+        val current3 = viewModel.uiState.value
+        trySilentRechargeQuery(current3.line2.plan)
     }
 
     // Si ya se registraron las lecturas de hoy, retiramos el recordatorio que
@@ -242,6 +293,22 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
         onApplyAutoReading = { sessionId, text ->
             viewModel.applyUssdReading(2, text, sessionId)
         }
+    )
+
+    val rechargeConsult = rememberUssdConsultation(
+        lineId = 2,
+        ussdCode = PrepaidRecharge.USSD_CODE,
+        selectedSimSlot = state.line2.plan.simSlotIndex,
+        onStartAutoConsult = { useAccessibility ->
+            viewModel.startUssdConsultation(2, useAccessibility)
+        },
+        onEnableAccessibilityFallback = { sessionId ->
+            viewModel.enableAccessibilityFallback(2, sessionId)
+        },
+        onApplyAutoReading = { sessionId, text ->
+            viewModel.applyUssdReading(2, text, sessionId)
+        },
+        successMessage = "Fecha de recarga actualizada."
     )
 
     if (selectedTab != 0) {
@@ -347,6 +414,8 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                     logs = state.logs,
                     onConsultBalance = { line2Consult.start() },
                     consultingBalance = state.consultingLineId == 2,
+                    onConsultRechargeDate = { rechargeConsult.start() },
+                    consultingRechargeDate = state.consultingLineId == 2,
                     onOpenConfigurePackage = {
                         targetLineId = 2
                         showConfigurePackageDialog = true
@@ -433,6 +502,7 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                 onDismiss = { showNewPurchaseDialog = false },
                 onConfirm = { packageMB, totalDays, purchaseDateMillis ->
                     viewModel.registerNewPrepaidPurchase(2, packageMB, totalDays, purchaseDateMillis)
+                    RechargeReminderWorker.cancel(context)
                     showNewPurchaseDialog = false
                 }
             )

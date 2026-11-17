@@ -14,10 +14,10 @@ import com.example.data.model.DataPlanEntity
         DataPlanEntity::class,
         DataBalanceLogEntity::class
     ],
-    version = 7,
+    version = 8,
     // Schemas are not exported: keeping app/schemas in sync from CI builds
-    // is not worth it for this project. New installs get v7 directly and
-    // existing ones migrate 4 -> 5 -> 6 -> 7 below.
+    // is not worth it for this project. New installs get v8 directly and
+    // existing ones migrate 4 -> 5 -> 6 -> 7 -> 8 below.
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -52,6 +52,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v8: prepaid line stores when a balance recharge becomes possible,
+        // plus the cycle in which the carrier date was queried.
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE data_plan ADD COLUMN rechargeEligibleDateMs INTEGER")
+                db.execSQL("ALTER TABLE data_plan ADD COLUMN rechargeCheckedCycleStartMs INTEGER")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -59,7 +68,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mobile_data_forecast.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

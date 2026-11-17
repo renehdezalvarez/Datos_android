@@ -246,6 +246,13 @@ fun DataSettingsScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (state.line2.rechargeEligibleDateFormatted.isNotBlank()) {
+                            Text(
+                                text = "Recarga disponible desde: ${state.line2.rechargeEligibleDateFormatted}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(10.dp))
 

@@ -8,6 +8,7 @@ import com.example.data.model.DataPlanEntity
 import com.example.data.repository.DataPlanRepository
 import com.example.domain.DataForecastCalculator
 import com.example.domain.DataForecastResult
+import com.example.domain.PrepaidRecharge
 import com.example.domain.UssdParser
 import com.example.ui.components.DataFormatters
 import com.example.ussd.UssdCaptureHolder
@@ -26,7 +27,11 @@ data class SingleLineState(
     val forecast: DataForecastResult,
     val displayUnit: String = "GB",
     val simulatedDailyMB: Double? = null,
-    val expirationDateFormatted: String = ""
+    val expirationDateFormatted: String = "",
+    /** Prepaid only: first day the operator allows a balance recharge. */
+    val rechargeEligibleDateFormatted: String = "",
+    /** Date reported by the carrier (the day before [rechargeEligibleDateFormatted]). */
+    val rechargeCarrierDateFormatted: String = ""
 )
 
 /** Result of an automatically interpreted USSD response. */
@@ -105,6 +110,13 @@ class DataForecastViewModel(
     /** The day the UI currently shows for a line, used when logging readings. */
     private fun displayedCycleDay(lineId: Int, plan: DataPlanEntity): Int =
         if (lineId == 1) line1CycleDay(plan) else cycleDayOf(plan, plan.totalCycleDays)
+
+    /** Whether the silent *222*732# query is still pending for this prepaid cycle. */
+    fun needsRechargeQuery(plan: DataPlanEntity): Boolean = PrepaidRecharge.needsQuery(
+        planType = plan.planType,
+        checkedCycleStartMs = plan.rechargeCheckedCycleStartMs,
+        purchaseTimestamp = plan.purchaseTimestamp
+    )
 
     private val _simulatedDailyMBLine1 = MutableStateFlow<Double?>(null)
     private val _simulatedDailyMBLine2 = MutableStateFlow<Double?>(null)
@@ -216,7 +228,8 @@ class DataForecastViewModel(
     private suspend fun applyUssdCapture(lineId: Int, text: String) {
         val mb = UssdParser.parseDataBalanceMB(text)
         val daysRemaining = UssdParser.parseDaysRemaining(text)
-        if (mb == null && daysRemaining == null) return
+        val rechargeInfo = if (lineId == 2) UssdParser.parseRechargeDate(text) else null
+        if (mb == null && daysRemaining == null && rechargeInfo == null) return
         _consultingLineId.compareAndSet(lineId, null)
 
         val current = repository.getDataPlan(lineId).firstOrNull() ?: return
@@ -239,23 +252,34 @@ class DataForecastViewModel(
             )
         }
 
+        if (rechargeInfo != null && updated.planType == PREPAID_PLAN_TYPE) {
+            updated = updated.copy(
+                rechargeEligibleDateMs = rechargeInfo.eligibleDateMs,
+                rechargeCheckedCycleStartMs = updated.purchaseTimestamp
+            )
+        }
+
         repository.saveOrUpdatePlan(updated)
 
-        val day = displayedCycleDay(lineId, updated)
-        repository.addLog(
-            lineId,
-            updated.remainingBalanceMB,
-            day,
-            "Lectura USSD automática: ${text.replace('\n', ' ').take(120)}"
-        )
+        // A recharge-date answer has no balance reading: logging it would
+        // wrongly silence the daily "consulta tu saldo" reminder for this line.
+        if (mb != null || daysRemaining != null) {
+            val day = displayedCycleDay(lineId, updated)
+            repository.addLog(
+                lineId,
+                updated.remainingBalanceMB,
+                day,
+                "Lectura USSD automática: ${text.replace('\n', ' ').take(120)}"
+            )
 
-        _lastAutoReading.value = UssdAutoReading(
-            lineId = lineId,
-            remainingMB = mb?.let { it.coerceIn(0.0, updated.packageTotalMB) },
-            daysRemaining = daysRemaining,
-            newCycleDay = newCycleDay,
-            rawText = text.trim()
-        )
+            _lastAutoReading.value = UssdAutoReading(
+                lineId = lineId,
+                remainingMB = mb?.let { it.coerceIn(0.0, updated.packageTotalMB) },
+                daysRemaining = daysRemaining,
+                newCycleDay = newCycleDay,
+                rawText = text.trim()
+            )
+        }
     }
 
     val uiState: StateFlow<DataForecastUiState> = combine(
@@ -317,6 +341,17 @@ class DataForecastViewModel(
         val expDateFormat = java.text.SimpleDateFormat("dd 'de' MMMM", java.util.Locale("es", "ES"))
         val expirationFormatted = expDateFormat.format(expireCal.time)
 
+        val rechargeDateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("es", "ES"))
+        val rechargeEligibleFormatted = plan2.rechargeEligibleDateMs
+            ?.let { rechargeDateFormat.format(java.util.Date(it)) } ?: ""
+        val rechargeCarrierFormatted = plan2.rechargeEligibleDateMs?.let { eligibleMs ->
+            val carrierCal = Calendar.getInstance().apply {
+                timeInMillis = eligibleMs
+                add(Calendar.DAY_OF_YEAR, -1)
+            }
+            rechargeDateFormat.format(carrierCal.time)
+        } ?: ""
+
         DataForecastUiState(
             line1 = SingleLineState(
                 plan = plan1.copy(customCurrentDay = currentDay1, totalCycleDays = totalDays1),
@@ -330,7 +365,9 @@ class DataForecastViewModel(
                 forecast = forecastLine2,
                 displayUnit = plan2.displayUnit,
                 simulatedDailyMB = sim2,
-                expirationDateFormatted = expirationFormatted
+                expirationDateFormatted = expirationFormatted,
+                rechargeEligibleDateFormatted = rechargeEligibleFormatted,
+                rechargeCarrierDateFormatted = rechargeCarrierFormatted
             ),
             logs = logs,
             calendarCurrentDay = currentDayOfMonth(),
@@ -407,7 +444,7 @@ class DataForecastViewModel(
 
             _customTotalDaysLine2.value = totalDays
 
-            val updated = if (previousExpired) {
+            val updatedBase = if (previousExpired) {
                 current.copy(
                     packageTotalMB = safePackage,
                     remainingBalanceMB = safePackage,
@@ -429,6 +466,12 @@ class DataForecastViewModel(
                     planName = "Paquete ${DataFormatters.format(current.packageTotalMB + safePackage, current.displayUnit)} ($totalDays días)"
                 )
             }
+            // A new cycle invalidates the previous recharge date and forces a
+            // fresh *222*732# query on the next app start.
+            val updated = updatedBase.copy(
+                rechargeEligibleDateMs = null,
+                rechargeCheckedCycleStartMs = null
+            )
             repository.saveOrUpdatePlan(updated)
             repository.addLog(
                 lineId,

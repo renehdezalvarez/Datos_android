@@ -147,4 +147,53 @@ class UssdParserTest {
         assertNull(UssdParser.parseDaysRemaining(""))
         assertNull(UssdParser.parseDaysRemaining("Su saldo principal es 25.00 CUP"))
     }
+
+    // ------------------------------------------------------------------
+    // parseRechargeDate: fecha del operador para recargar (día-mes-año)
+    // ------------------------------------------------------------------
+
+    private fun midnightOf(year: Int, month: Int, day: Int): Long =
+        Calendar.getInstance().apply {
+            clear()
+            set(year, month, day, 0, 0, 0)
+        }.timeInMillis
+
+    @Test
+    fun testParseRechargeDate_carrierSample() {
+        val now = dateOf(2026, Calendar.NOVEMBER, 17)
+        val info = UssdParser.parseRechargeDate(
+            "Ud ha alcanzado el monto de recarga permitido de 360 CUP. " +
+                "Puede recargar posterior al dia 07-12-26",
+            now
+        )!!
+
+        assertEquals("07-12-26", info.matchedText)
+        assertEquals(midnightOf(2026, Calendar.DECEMBER, 7), info.carrierDateMs)
+        // El día siguiente es cuando ya se puede recargar.
+        assertEquals(midnightOf(2026, Calendar.DECEMBER, 8), info.eligibleDateMs)
+    }
+
+    @Test
+    fun testParseRechargeDate_fourDigitYearAndTextualMonth() {
+        val now = dateOf(2026, Calendar.NOVEMBER, 17)
+
+        val numeric = UssdParser.parseRechargeDate(
+            "Puede recargar a partir del 08-12-2026", now
+        )!!
+        assertEquals(midnightOf(2026, Calendar.DECEMBER, 8), numeric.carrierDateMs)
+        assertEquals(midnightOf(2026, Calendar.DECEMBER, 9), numeric.eligibleDateMs)
+
+        val textual = UssdParser.parseRechargeDate(
+            "Podrá recargar posterior al día 31 de diciembre de 2026", now
+        )!!
+        assertEquals(midnightOf(2026, Calendar.DECEMBER, 31), textual.carrierDateMs)
+        assertEquals(midnightOf(2027, Calendar.JANUARY, 1), textual.eligibleDateMs)
+    }
+
+    @Test
+    fun testParseRechargeDate_invalid() {
+        val now = dateOf(2026, Calendar.NOVEMBER, 17)
+        assertNull(UssdParser.parseRechargeDate("", now))
+        assertNull(UssdParser.parseRechargeDate("Saldo 25.00 CUP", now))
+    }
 }

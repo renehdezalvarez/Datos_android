@@ -43,7 +43,8 @@ fun rememberUssdConsultation(
     selectedSimSlot: Int?,
     onStartAutoConsult: (useAccessibility: Boolean) -> Long,
     onEnableAccessibilityFallback: (sessionId: Long) -> Unit,
-    onApplyAutoReading: (sessionId: Long, text: String) -> Unit
+    onApplyAutoReading: (sessionId: Long, text: String) -> Unit,
+    successMessage: String = "Saldo actualizado automáticamente."
 ): UssdConsultTrigger {
     val context = LocalContext.current
     val systemApiAvailable = remember(context) { UssdSystemApi.isAvailable(context) }
@@ -57,6 +58,7 @@ fun rememberUssdConsultation(
     val startConsult = rememberUpdatedState(onStartAutoConsult)
     val enableFallback = rememberUpdatedState(onEnableAccessibilityFallback)
     val applyReading = rememberUpdatedState(onApplyAutoReading)
+    val currentSuccessMessage = rememberUpdatedState(successMessage)
 
     var pendingSystemApiAttempt by remember { mutableStateOf(false) }
 
@@ -168,12 +170,15 @@ fun rememberUssdConsultation(
                     val text = result.response
                     val hasReadableData =
                         UssdParser.parseDataBalanceMB(text) != null ||
-                            (lineId == 2 && UssdParser.parseDaysRemaining(text) != null)
+                            (lineId == 2 && (
+                                UssdParser.parseDaysRemaining(text) != null ||
+                                    UssdParser.parseRechargeDate(text) != null
+                                ))
                     if (hasReadableData) {
                         applyReading.value(sessionId, text)
                         Toast.makeText(
                             context,
-                            "Saldo actualizado automáticamente.",
+                            currentSuccessMessage.value,
                             Toast.LENGTH_SHORT
                         ).show()
                     } else {

@@ -157,4 +157,141 @@ object UssdParser {
         val days = (diffMs / DAY_MS).toInt() + 1 // count today as a remaining day
         return days.coerceAtLeast(0)
     }
+
+    // ------------------------------------------------------------------
+    // Prepaid balance-recharge date (*222*732#)
+    // ------------------------------------------------------------------
+
+    data class RechargeDateInfo(
+        /** Date given by the carrier (last day WITHOUT recharge access). */
+        val carrierDateMs: Long,
+        /** First day the line can be recharged: carrier date + 1 day. */
+        val eligibleDateMs: Long,
+        val matchedText: String
+    )
+
+    private data class DateCandidate(
+        val index: Int,
+        val carrierDateMs: Long,
+        val text: String
+    )
+
+    private val rechargeContextWords = listOf(
+        "recarg", "posterior", "desde", "a partir", "puede", "fecha",
+        "día", "dia", "habilit", "disponible"
+    )
+
+    private val numericDatePattern = Regex("""(\d{1,2})[\/\.\-](\d{1,2})(?:[\/\.\-](\d{2,4}))?""")
+    private val textualDatePattern =
+        Regex("""(?i)(\d{1,2})\s+de\s+([a-záéíóúñ]+)(?:\s+de\s+(\d{2,4}))?""")
+
+    private val monthNames = mapOf(
+        "ene" to Calendar.JANUARY, "enero" to Calendar.JANUARY,
+        "jan" to Calendar.JANUARY, "january" to Calendar.JANUARY,
+        "feb" to Calendar.FEBRUARY, "febrero" to Calendar.FEBRUARY,
+        "february" to Calendar.FEBRUARY,
+        "mar" to Calendar.MARCH, "marzo" to Calendar.MARCH, "march" to Calendar.MARCH,
+        "abr" to Calendar.APRIL, "abre" to Calendar.APRIL, "abril" to Calendar.APRIL,
+        "apr" to Calendar.APRIL, "april" to Calendar.APRIL,
+        "may" to Calendar.MAY, "mayo" to Calendar.MAY,
+        "jun" to Calendar.JUNE, "junio" to Calendar.JUNE, "june" to Calendar.JUNE,
+        "jul" to Calendar.JULY, "julio" to Calendar.JULY, "july" to Calendar.JULY,
+        "ago" to Calendar.AUGUST, "agosto" to Calendar.AUGUST,
+        "aug" to Calendar.AUGUST, "august" to Calendar.AUGUST,
+        "sep" to Calendar.SEPTEMBER, "sept" to Calendar.SEPTEMBER,
+        "septiembre" to Calendar.SEPTEMBER, "set" to Calendar.SEPTEMBER,
+        "setiembre" to Calendar.SEPTEMBER, "september" to Calendar.SEPTEMBER,
+        "oct" to Calendar.OCTOBER, "octubre" to Calendar.OCTOBER, "october" to Calendar.OCTOBER,
+        "nov" to Calendar.NOVEMBER, "noviembre" to Calendar.NOVEMBER, "november" to Calendar.NOVEMBER,
+        "dic" to Calendar.DECEMBER, "diciembre" to Calendar.DECEMBER,
+        "dec" to Calendar.DECEMBER, "december" to Calendar.DECEMBER
+    )
+
+    /**
+     * Extracts the date from the carrier's *222*732# answer. The operator
+     * reports the last day without recharge access ("...posterior al dia
+     * 07-12-26"); the returned [RechargeDateInfo.eligibleDateMs] is the NEXT
+     * day, which is when the user can actually top up.
+     *
+     * Supports dd/mm/yy, dd-mm-yyyy, "dd de mes de yyyy" and dates without an
+     * explicit year (next occurrence is assumed). Dates near recharge wording
+     * win; otherwise the first date in the message is used.
+     */
+    fun parseRechargeDate(text: String, now: Calendar? = null): RechargeDateInfo? {
+        if (text.isBlank()) return null
+        val lowerText = text.lowercase()
+        // A balance answer can also contain dates ("válido hasta 25/11").
+        // Only treat it as a recharge answer when recharge wording is present.
+        if (rechargeContextWords.none { lowerText.contains(it) }) return null
+        val reference = now ?: Calendar.getInstance()
+
+        val candidates = buildList {
+            numericDatePattern.findAll(text).forEach { match ->
+                val day = match.groupValues[1].toIntOrNull() ?: return@forEach
+                val month = match.groupValues[2].toIntOrNull() ?: return@forEach
+                val carrierMs = carrierDateMs(day, month, match.groupValues[3], reference)
+                    ?: return@forEach
+                add(DateCandidate(match.range.first, carrierMs, match.value))
+            }
+            textualDatePattern.findAll(text).forEach { match ->
+                val day = match.groupValues[1].toIntOrNull() ?: return@forEach
+                val month = monthNames[match.groupValues[2].lowercase()] ?: return@forEach
+                val carrierMs = carrierDateMs(day, month + 1, match.groupValues[3], reference)
+                    ?: return@forEach
+                add(DateCandidate(match.range.first, carrierMs, match.value))
+            }
+        }.sortedBy { it.index }
+
+        val chosen = candidates.firstOrNull { candidate ->
+            val contextStart = maxOf(0, candidate.index - 70)
+            val context = text.substring(contextStart, candidate.index).lowercase()
+            rechargeContextWords.any { context.contains(it) }
+        } ?: candidates.firstOrNull() ?: return null
+
+        val eligibleMs = Calendar.getInstance().apply {
+            timeInMillis = chosen.carrierDateMs
+            add(Calendar.DAY_OF_YEAR, 1)
+        }.timeInMillis
+
+        return RechargeDateInfo(chosen.carrierDateMs, eligibleMs, chosen.text)
+    }
+
+    private fun carrierDateMs(
+        day: Int,
+        month: Int,
+        yearPart: String,
+        reference: Calendar
+    ): Long? {
+        if (day !in 1..31 || month !in 1..12) return null
+        val hasYear = yearPart.isNotEmpty()
+        var year = if (hasYear) yearPart.toIntOrNull() ?: return null else reference.get(Calendar.YEAR)
+        if (year in 1..99) year += 2000
+
+        val calendar = Calendar.getInstance().apply {
+            clear()
+            isLenient = false
+            set(year, month - 1, day, 0, 0, 0)
+        }
+        val carrierMs = try {
+            calendar.timeInMillis
+        } catch (_: IllegalArgumentException) {
+            return null
+        }
+
+        // Without a year, a date already in the past means next year.
+        if (!hasYear) {
+            val todayStart = Calendar.getInstance().apply {
+                timeInMillis = reference.timeInMillis
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            if (carrierMs < todayStart) {
+                calendar.add(Calendar.YEAR, 1)
+                return calendar.timeInMillis
+            }
+        }
+        return carrierMs
+    }
 }

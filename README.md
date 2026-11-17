@@ -24,6 +24,11 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
 - **Semáforo de riesgo**: `Sobrante`, `En ritmo`, `Riesgo de agotarse`,
   `Crítico`.
 - **Simulador what-if**: "¿y si consumo X MB al día, me alcanza?"
+- **Recarga de saldo (solo línea prepaga)**: consulta `*222*732#` una vez por
+  ciclo al abrir la app, guarda la fecha en que el operador permite recargar
+  (la fecha del mensaje más un día) y la muestra en la línea prepaga. Un
+  recordatorio diario a las 09:00 avisa desde ese día hasta que registres un
+  paquete nuevo. El aviso de "último día" del paquete sigue igual.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El
   código USSD por operador y la SIM de cada línea se configuran una vez; la app

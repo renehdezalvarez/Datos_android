@@ -21,7 +21,13 @@ data class DataPlanEntity(
     // 0-based SIM slot used to query this line's balance. Null means "use
     // the system default subscription", which is what users had before the
     // selector existed and is still useful on single-SIM devices.
-    val simSlotIndex: Int? = null
+    val simSlotIndex: Int? = null,
+    // Prepaid line only: first day the operator allows a balance recharge,
+    // obtained from *222*732#. Kept at local midnight for date comparisons.
+    val rechargeEligibleDateMs: Long? = null,
+    // Purchase timestamp of the cycle in which the recharge date was queried.
+    // A new purchase changes this and makes the query run again.
+    val rechargeCheckedCycleStartMs: Long? = null
 )
 
 @Entity(tableName = "data_balance_logs")
