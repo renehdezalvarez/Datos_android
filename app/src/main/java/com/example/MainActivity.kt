@@ -136,7 +136,8 @@ private fun todayRange(nowMillis: Long = System.currentTimeMillis()): Pair<Long,
         set(Calendar.SECOND, 0)
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
-    val end = (start.clone() as Calendar).apply {
+    val end = Calendar.getInstance().apply {
+        timeInMillis = start
         add(Calendar.DAY_OF_YEAR, 1)
     }.timeInMillis
     return start to end
