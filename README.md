@@ -63,6 +63,54 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   lectura de un día sirve como saldo inicial del día siguiente.
 - **Persistencia local** con Room (sin cuentas, sin servicios externos).
 
+## 📲 Instalación y configuración
+
+### Instalar
+
+1. Descarga el APK firmado de la última
+   [Release](https://github.com/renehdezalvarez/datos_android/releases)
+   (archivo `PrevisorDatos_X.Y.Z.apk`). No hace falta cuenta ni Play Store.
+2. La primera vez Android pedirá permiso para instalar aplicaciones desconocidas.
+   Concédelo solo a **Previsor de Datos Móviles** cuando te lo pregunte. Si no
+   aparece el aviso, ve a **Ajustes del teléfono → Apps → Previsor de Datos
+   Móviles → Instalar aplicaciones desconocidas**. Ese mismo permiso lo necesita
+   la actualización desde la app.
+3. Instala el APK y abre la app. En versiones posteriores no tienes que volver a
+   descargarlo: entra en **Ajustes → Buscar actualizaciones**. La descarga es
+   silenciosa y Android solo pide confirmar la instalación al final.
+
+### Configuración para que la consulta de saldo no dé error
+
+1. **Permisos de teléfono**: al abrir la app concede **Teléfono**
+   (`CALL_PHONE` y `READ_PHONE_STATE`). Sin `CALL_PHONE` no se puede marcar el
+   código USSD; sin `READ_PHONE_STATE` no se pueden listar las SIM y se usa la
+   predeterminada del sistema, que en un teléfono de doble SIM suele ser la
+   línea equivocada. Concede también **Notificaciones** en Android 13+ para los
+   avisos de saldo, vencimiento y recarga.
+2. **Código USSD de cada línea**: en **Ajustes → Lectura USSD** comprueba el
+   código Guardado (por defecto, Línea 1 `*111#` y Línea 2 `*222*328#`). Si tu
+   operador usa otro, cámbialo y guárdalo. La consulta de fecha de recarga de la
+   línea prepaga usa siempre `*222*732#`.
+3. **SIM de cada línea**: en **Ajustes**, usa el selector **SIM de la línea** de
+   cada tarjeta y elige el slot donde está esa línea (0 = primera SIM, 1 =
+   segunda). En un teléfono de una sola SIM puedes dejar la opción
+   predeterminada del sistema.
+4. **Lector de respuestas USSD (respaldo)**: algunos operadores desactivan la
+   API oficial de telefonía (`sendUssdRequest`). Actívalo en **Ajustes del
+   teléfono → Accesibilidad → Servicios descargados → Lector de respuestas
+   USSD**. Así, **Consultar Saldo** abre el marcador, marca el código y lee la
+   respuesta del operador únicamente mientras dura la consulta. Si no lo
+   activas, la app no puede capturar la respuesta sola: pega el texto en
+   **Ajustes → Lectura USSD** para registrar el saldo manualmente.
+5. **Comprueba el entorno**: la SIM debe estar activa y con servicio (sin modo
+   avión) y el operador debe responder al código USSD. Si la respuesta muestra
+   un menú, termínalo en el marcador o pega el texto final en el formulario
+   manual.
+
+Después de esto, **Consultar Saldo** en cualquiera de las dos líneas registra el
+saldo y los días restantes automáticamente. Si todavía falla, revisa sobre todo
+los puntos 1, 3 y 4: son las causas habituales de error.
+
 ## 🏗️ Arquitectura
 
 MVVM con Jetpack Compose, organizado por capas:

@@ -404,10 +404,10 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                     icon = {
                         Icon(
                             imageVector = if (selectedTab == 1) Icons.Filled.SimCard else Icons.Outlined.SimCard,
-                            contentDescription = "Prepago 35d"
+                            contentDescription = "Línea 2"
                         )
                     },
-                    label = { Text("Prepago 35d") },
+                    label = { Text("Línea 2") },
                     modifier = Modifier.testTag("nav_tab_line2")
                 )
 
