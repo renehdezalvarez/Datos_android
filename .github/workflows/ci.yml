@@ -61,8 +61,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          cp app/build/outputs/apk/release/app-release.apk "PrevisorDatos_${VERSION}.apk"
-          sha256sum "PrevisorDatos_${VERSION}.apk"
-          gh release create "$GITHUB_REF_NAME" "PrevisorDatos_${VERSION}.apk" \
+          APK="PrevisorDatos_${VERSION}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          SHA256="$(sha256sum "$APK" | cut -d' ' -f1)"
+          SIZE="$(stat -c%s "$APK")"
+          VERSION_CODE="$(sed -n 's/^[[:space:]]*versionCode *= *\([0-9][0-9]*\).*$/\1/p' app/build.gradle.kts | head -n1)"
+          VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName *= *"\([^"]*\)".*$/\1/p' app/build.gradle.kts | head -n1)"
+
+          # The app reads this flat file from the release assets: exact
+          # versionCode comparison plus the SHA-256 it verifies before install.
+          cat > update.json <<EOF
+          {
+            "versionCode": ${VERSION_CODE},
+            "versionName": "${VERSION_NAME}",
+            "tag": "${GITHUB_REF_NAME}",
+            "apk": "${APK}",
+            "sha256": "${SHA256}",
+            "size": ${SIZE}
+          }
+          EOF
+
+          sha256sum "$APK"
+          cat update.json
+          gh release create "$GITHUB_REF_NAME" "$APK" update.json \
             --title "$GITHUB_REF_NAME – Previsor de Datos Móviles" \
             --generate-notes

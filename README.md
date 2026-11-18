@@ -116,6 +116,24 @@ Los APK firmados se publican como
 [Releases](https://github.com/renehdezalvarez/datos_android/releases), no en
 el historial de git.
 
+## 🔄 Actualizaciones desde la app
+
+La app comprueba silenciosamente la última release de GitHub (cada 6 horas,
+también al abrir), muestra una tarjeta en **Ajustes** cuando hay una versión
+nueva y descarga el APK en segundo plano. La descarga se verifica con el
+SHA-256 y con la firma de la app antes de ofrecer **Instalar**.
+
+Android no permite que una app instalada por sideload instale silenciosamente:
+el instalador del sistema siempre pide una confirmación. El único toque del
+usuario es ese; si aún no concedió "instalar aplicaciones desconocidas", la app
+abre el ajuste correspondiente y reanuda la instalación al volver.
+
+Cada release publica un `update.json` como asset con `versionCode`,
+`versionName`, `tag`, nombre del APK, `sha256` y tamaño. La versión se compara
+por `versionCode`, así que el formato del `versionName` no afecta la detección.
+El botón **Buscar actualizaciones** fuerza una comprobación; **Ahora no** omite
+esa versión hasta la siguiente release.
+
 ## 📄 Licencia
 
 Sin licencia definida por ahora (repositorio privado). Si decides abrirlo,

@@ -1,7 +1,9 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -28,17 +30,22 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.domain.PrepaidRecharge
@@ -62,8 +69,14 @@ import com.example.ui.screens.DataSettingsScreen
 import com.example.ui.screens.Prepaid35LineScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.DataForecastViewModel
+import com.example.updates.UpdateCheckWorker
+import com.example.updates.UpdateInstaller
+import com.example.updates.UpdateManager
+import com.example.updates.UpdateManagerProvider
 import com.example.ussd.SimInfoProvider
 import com.example.ussd.UssdSystemApi
+import kotlinx.coroutines.launch
+import java.io.File
 import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
@@ -81,11 +94,14 @@ class MainActivity : ComponentActivity() {
         BalanceReadingReminderWorker.schedule(applicationContext)
         RechargeReminderWorker.schedule(applicationContext)
 
+        val updateManager = UpdateManagerProvider.get(applicationContext)
+        UpdateCheckWorker.schedule(applicationContext)
+
         setContent {
             MyApplicationTheme {
                 val viewModel: DataForecastViewModel = viewModel(factory = viewModelFactory)
                 RequestNotificationPermissionIfNeeded()
-                MainDataContent(viewModel = viewModel)
+                MainDataContent(viewModel = viewModel, updateManager = updateManager)
             }
         }
     }
@@ -126,9 +142,47 @@ private fun hasReadingToday(
 }
 
 @Composable
-fun MainDataContent(viewModel: DataForecastViewModel) {
+fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManager) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val updateState by updateManager.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pendingInstall by remember { mutableStateOf(false) }
+
+    // Android only lets a sideloaded app install through its own confirmation
+    // screen. We keep everything else invisible and remember the install
+    // request while the user grants "install unknown apps" in system settings.
+    fun tryInstallUpdate() {
+        val path = updateState.downloadedPath ?: return
+        val apkFile = File(path)
+        if (!apkFile.isFile) {
+            updateManager.clearDownload()
+            return
+        }
+        if (UpdateInstaller.canRequestInstall(context)) {
+            UpdateInstaller.install(context, apkFile)
+        } else {
+            pendingInstall = true
+            context.startActivity(UpdateInstaller.manageUnknownSourcesIntent(context))
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingInstall &&
+                UpdateInstaller.canRequestInstall(context)
+            ) {
+                pendingInstall = false
+                updateState.downloadedPath?.let { path ->
+                    val apkFile = File(path)
+                    if (apkFile.isFile) UpdateInstaller.install(context, apkFile)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var targetLineId by rememberSaveable { mutableIntStateOf(1) }
@@ -453,7 +507,25 @@ fun MainDataContent(viewModel: DataForecastViewModel) {
                         viewModel.updateSimSlot(lineId, simSlotIndex)
                     },
                     onToggleUnit = { lineId -> viewModel.toggleDisplayUnit(lineId) },
-                    onResetToCalendar = { lineId -> viewModel.resetToRealCalendar(lineId) }
+                    onResetToCalendar = { lineId -> viewModel.resetToRealCalendar(lineId) },
+                    updateState = updateState,
+                    onCheckUpdates = { scope.launch { updateManager.check(force = true) } },
+                    onDownloadUpdate = { updateManager.download() },
+                    onInstallUpdate = { tryInstallUpdate() },
+                    onDismissUpdate = { updateManager.dismiss() },
+                    onOpenRelease = {
+                        val url = updateState.info?.releaseUrl
+                        if (!url.isNullOrBlank()) {
+                            try {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            } catch (e: Exception) {
+                                // Sin navegador instalado: no hacemos nada.
+                            }
+                        }
+                    }
                 )
             }
         }

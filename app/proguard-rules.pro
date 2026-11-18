@@ -11,6 +11,15 @@
 -keep class com.example.notifications.BalanceReadingReminderWorker {
     public <init>(...);
 }
+-keep class com.example.notifications.RechargeReminderWorker {
+    public <init>(...);
+}
+-keep class com.example.updates.UpdateCheckWorker {
+    public <init>(...);
+}
+-keep class com.example.updates.UpdateDownloadWorker {
+    public <init>(...);
+}
 
 # Keep crash reports readable.
 -keepattributes SourceFile,LineNumberTable

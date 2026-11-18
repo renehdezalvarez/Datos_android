@@ -40,7 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.DataFormatters
 import com.example.ui.components.SimSelector
+import com.example.ui.components.UpdateCard
 import com.example.ui.viewmodel.DataForecastUiState
+import com.example.updates.UpdateUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +53,12 @@ fun DataSettingsScreen(
     onSelectSim: (lineId: Int, simSlotIndex: Int?) -> Unit,
     onToggleUnit: (lineId: Int) -> Unit,
     onResetToCalendar: (lineId: Int) -> Unit,
+    updateState: UpdateUiState,
+    onCheckUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
+    onDismissUpdate: () -> Unit,
+    onOpenRelease: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -370,6 +378,18 @@ fun DataSettingsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Sincronizar días transcurridos")
                 }
+            }
+
+            // Self-update: check, download and install the signed APK from GitHub Releases.
+            item {
+                UpdateCard(
+                    state = updateState,
+                    onCheck = onCheckUpdates,
+                    onDownload = onDownloadUpdate,
+                    onInstall = onInstallUpdate,
+                    onDismiss = onDismissUpdate,
+                    onOpenRelease = onOpenRelease
+                )
             }
         }
     }
