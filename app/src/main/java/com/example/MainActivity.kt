@@ -48,6 +48,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.domain.BalanceReadingReminder
+import com.example.domain.BalanceReadingSample
 import com.example.domain.PrepaidRecharge
 import com.example.domain.UssdParser
 import com.example.notifications.BalanceReadingReminderWorker
@@ -125,20 +127,36 @@ fun RequestNotificationPermissionIfNeeded() {
     }
 }
 
-/** True when [logs] already contains a reading for [lineId] in the local day. */
-private fun hasReadingToday(
-    logs: List<DataBalanceLogEntity>,
-    lineId: Int,
-    nowMillis: Long = System.currentTimeMillis()
-): Boolean {
-    val startOfToday = Calendar.getInstance().apply {
+/** Local-day boundaries in milliseconds; the end is exclusive. */
+private fun todayRange(nowMillis: Long = System.currentTimeMillis()): Pair<Long, Long> {
+    val start = Calendar.getInstance().apply {
         timeInMillis = nowMillis
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
         set(Calendar.SECOND, 0)
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
-    return logs.any { it.planId == lineId && it.timestamp >= startOfToday }
+    val end = (start.clone() as Calendar).apply {
+        add(Calendar.DAY_OF_YEAR, 1)
+    }.timeInMillis
+    return start to end
+}
+
+/**
+ * Lines still missing today's reading. Uses the same [dayStart, dayEnd) rule as
+ * the 22:00 reminder, so a reading stored exactly at midnight counts for the
+ * next day and both features never disagree about what "today" means.
+ */
+private fun missingReadingsToday(
+    logs: List<DataBalanceLogEntity>,
+    nowMillis: Long = System.currentTimeMillis()
+): List<Int> {
+    val (start, end) = todayRange(nowMillis)
+    return BalanceReadingReminder.missingLineIds(
+        readings = logs.map { BalanceReadingSample(it.planId, it.timestamp) },
+        dayStartMs = start,
+        dayEndMs = end
+    )
 }
 
 @Composable
@@ -192,126 +210,164 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
     var showAddLogDialog by remember { mutableStateOf(false) }
     var showNewPurchaseDialog by remember { mutableStateOf(false) }
     var showUssdReadingDialog by remember { mutableStateOf(false) }
-    var autoReadAttempted by rememberSaveable { mutableStateOf(false) }
+    // Día local en que se hizo la última pasada automática (clave estable para
+    // no repetirla en cada recomposición) y guardia contra corridas simultáneas.
+    var lastAutoReadDay by rememberSaveable { mutableIntStateOf(-1) }
+    var autoReadRunning by remember { mutableStateOf(false) }
 
-    LaunchedEffect(autoReadAttempted) {
-        if (autoReadAttempted) return@LaunchedEffect
-        // Espera breve para que Room emita planes y lecturas iniciales.
-        kotlinx.coroutines.delay(1200)
-        autoReadAttempted = true
+    fun currentDayKey(): Int = Calendar.getInstance().let {
+        it.get(Calendar.YEAR) * 1000 + it.get(Calendar.DAY_OF_YEAR)
+    }
 
-        suspend fun waitUntilIdle(maxMs: Long = 25_000L) {
-            val start = System.currentTimeMillis()
-            while (viewModel.uiState.value.consultingLineId != null &&
-                System.currentTimeMillis() - start < maxMs
-            ) {
-                kotlinx.coroutines.delay(300)
-            }
-        }
+    suspend fun runAutoReadIfNeeded() {
+        // Se captura al inicio: si la consulta cruza la medianoche, se marca
+        // este mismo día y el día nuevo vuelve a comprobarse al reanudar.
+        val dayKey = currentDayKey()
+        if (autoReadRunning || lastAutoReadDay == dayKey) return
+        autoReadRunning = true
+        try {
+            // Espera breve para que Room emita planes y lecturas iniciales.
+            kotlinx.coroutines.delay(1200)
 
-        fun trySilentAutoRead(
-            current: com.example.ui.viewmodel.DataForecastUiState,
-            lineId: Int,
-            ussdCode: String,
-            selectedSimSlot: Int?
-        ): Boolean {
-            if (hasReadingToday(current.logs, lineId)) return false
-            if (ussdCode.isBlank()) return false
-            if (viewModel.uiState.value.consultingLineId != null) return false
-            if (!UssdSystemApi.isAvailable(context)) return false
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) return false
-
-            val subscriptionId = if (selectedSimSlot != null) {
-                if (!SimInfoProvider.hasPermission(context)) return false
-                SimInfoProvider.subscriptionIdForSlot(context, selectedSimSlot) ?: return false
-            } else {
-                null
-            }
-
-            val sessionId = viewModel.startUssdConsultation(lineId, armAccessibility = false)
-            val started = UssdSystemApi.request(context, ussdCode, subscriptionId) { result ->
-                when (result) {
-                    is UssdSystemApi.Result.Success -> {
-                        val text = result.response
-                        val hasReadableData =
-                            UssdParser.parseDataBalanceMB(text) != null ||
-                                (lineId == 2 && UssdParser.parseDaysRemaining(text) != null)
-                        if (hasReadableData) {
-                            viewModel.applyUssdReading(lineId, text, sessionId)
-                        } else {
-                            viewModel.cancelUssdConsultation(lineId, sessionId)
-                        }
-                    }
-                    is UssdSystemApi.Result.Failure,
-                    UssdSystemApi.Result.Timeout -> viewModel.cancelUssdConsultation(lineId, sessionId)
+            suspend fun waitUntilIdle(maxMs: Long = 30_000L) {
+                val start = System.currentTimeMillis()
+                while (viewModel.uiState.value.consultingLineId != null &&
+                    System.currentTimeMillis() - start < maxMs
+                ) {
+                    kotlinx.coroutines.delay(300)
                 }
             }
-            if (!started) {
-                viewModel.cancelUssdConsultation(lineId, sessionId)
-                return false
-            }
-            return true
-        }
 
-        suspend fun trySilentRechargeQuery(plan: DataPlanEntity): Boolean {
-            if (!viewModel.needsRechargeQuery(plan)) return false
-            if (viewModel.uiState.value.consultingLineId != null) return false
-            if (!UssdSystemApi.isAvailable(context)) return false
-            if (ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.CALL_PHONE
-                ) != PackageManager.PERMISSION_GRANTED
-            ) return false
+            fun trySilentAutoRead(
+                current: com.example.ui.viewmodel.DataForecastUiState,
+                lineId: Int,
+                ussdCode: String,
+                selectedSimSlot: Int?
+            ): Boolean {
+                if (lineId !in missingReadingsToday(current.logs)) return false
+                if (ussdCode.isBlank()) return false
+                if (viewModel.uiState.value.consultingLineId != null) return false
+                if (!UssdSystemApi.isAvailable(context)) return false
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) return false
 
-            val subscriptionId = if (plan.simSlotIndex != null) {
-                if (!SimInfoProvider.hasPermission(context)) return false
-                SimInfoProvider.subscriptionIdForSlot(context, plan.simSlotIndex) ?: return false
-            } else {
-                null
-            }
-
-            val sessionId = viewModel.startUssdConsultation(2, armAccessibility = false)
-            val started = UssdSystemApi.request(
-                context,
-                PrepaidRecharge.USSD_CODE,
-                subscriptionId
-            ) { result ->
-                when (result) {
-                    is UssdSystemApi.Result.Success -> {
-                        if (UssdParser.parseRechargeDate(result.response) != null) {
-                            viewModel.applyUssdReading(2, result.response, sessionId)
-                        } else {
-                            viewModel.cancelUssdConsultation(2, sessionId)
-                        }
-                    }
-                    is UssdSystemApi.Result.Failure,
-                    UssdSystemApi.Result.Timeout -> viewModel.cancelUssdConsultation(2, sessionId)
+                val subscriptionId = if (selectedSimSlot != null) {
+                    if (!SimInfoProvider.hasPermission(context)) return false
+                    SimInfoProvider.subscriptionIdForSlot(context, selectedSimSlot) ?: return false
+                } else {
+                    null
                 }
+
+                val sessionId = viewModel.startUssdConsultation(lineId, armAccessibility = false)
+                val started = UssdSystemApi.request(context, ussdCode, subscriptionId) { result ->
+                    when (result) {
+                        is UssdSystemApi.Result.Success -> {
+                            val text = result.response
+                            val hasReadableData =
+                                UssdParser.parseDataBalanceMB(text) != null ||
+                                    (lineId == 2 && UssdParser.parseDaysRemaining(text) != null)
+                            if (hasReadableData) {
+                                viewModel.applyUssdReading(lineId, text, sessionId)
+                            } else {
+                                viewModel.cancelUssdConsultation(lineId, sessionId)
+                            }
+                        }
+                        is UssdSystemApi.Result.Failure,
+                        UssdSystemApi.Result.Timeout -> viewModel.cancelUssdConsultation(lineId, sessionId)
+                    }
+                }
+                if (!started) {
+                    viewModel.cancelUssdConsultation(lineId, sessionId)
+                    return false
+                }
+                return true
             }
-            if (!started) {
-                viewModel.cancelUssdConsultation(2, sessionId)
-                return false
+
+            fun trySilentRechargeQuery(plan: DataPlanEntity): Boolean {
+                if (!viewModel.needsRechargeQuery(plan)) return false
+                if (viewModel.uiState.value.consultingLineId != null) return false
+                if (!UssdSystemApi.isAvailable(context)) return false
+                if (ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.CALL_PHONE
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) return false
+
+                val subscriptionId = if (plan.simSlotIndex != null) {
+                    if (!SimInfoProvider.hasPermission(context)) return false
+                    SimInfoProvider.subscriptionIdForSlot(context, plan.simSlotIndex) ?: return false
+                } else {
+                    null
+                }
+
+                val sessionId = viewModel.startUssdConsultation(2, armAccessibility = false)
+                val started = UssdSystemApi.request(
+                    context,
+                    PrepaidRecharge.USSD_CODE,
+                    subscriptionId
+                ) { result ->
+                    when (result) {
+                        is UssdSystemApi.Result.Success -> {
+                            if (UssdParser.parseRechargeDate(result.response) != null) {
+                                viewModel.applyUssdReading(2, result.response, sessionId)
+                            } else {
+                                viewModel.cancelUssdConsultation(2, sessionId)
+                            }
+                        }
+                        is UssdSystemApi.Result.Failure,
+                        UssdSystemApi.Result.Timeout -> viewModel.cancelUssdConsultation(2, sessionId)
+                    }
+                }
+                if (!started) {
+                    viewModel.cancelUssdConsultation(2, sessionId)
+                    return false
+                }
+                return true
             }
-            return true
+
+            // Lectura automática silenciosa al abrir: solo líneas sin lectura hoy.
+            val current = viewModel.uiState.value
+            val started1 = trySilentAutoRead(current, 1, current.line1.plan.ussdCode, current.line1.plan.simSlotIndex)
+            if (started1) waitUntilIdle()
+            val current2 = viewModel.uiState.value
+            val started2 = trySilentAutoRead(current2, 2, current2.line2.plan.ussdCode, current2.line2.plan.simSlotIndex)
+            if (started2) waitUntilIdle()
+
+            // Prepaid only: one silent *222*732# query per purchase cycle.
+            val current3 = viewModel.uiState.value
+            trySilentRechargeQuery(current3.line2.plan)
+
+            // Solo cerramos el día cuando ambas líneas tienen lectura de hoy.
+            // Si faltó permiso, SIM o respuesta del operador, un próximo
+            // ON_RESUME reintenta únicamente las líneas pendientes.
+            if (missingReadingsToday(viewModel.uiState.value.logs).isEmpty()) {
+                lastAutoReadDay = dayKey
+            }
+        } finally {
+            autoReadRunning = false
         }
+    }
 
-        // Lectura automática silenciosa al abrir: solo líneas sin lectura hoy.
-        val current = viewModel.uiState.value
-        val started1 = trySilentAutoRead(current, 1, current.line1.plan.ussdCode, current.line1.plan.simSlotIndex)
-        if (started1) waitUntilIdle()
-        val current2 = viewModel.uiState.value
-        val started2 = trySilentAutoRead(current2, 2, current2.line2.plan.ussdCode, current2.line2.plan.simSlotIndex)
-        if (started2) waitUntilIdle()
+    // La clave es Unit a propósito: si el estado del día estuviera en la clave,
+    // escribirlo a mitad de la corrida cancelaría la coroutine en el siguiente
+    // delay y la Línea 2 nunca se consultaría (bug de medianoche).
+    LaunchedEffect(Unit) { runAutoReadIfNeeded() }
 
-        // Prepaid only: one silent *222*732# query per purchase cycle.
-        val current3 = viewModel.uiState.value
-        trySilentRechargeQuery(current3.line2.plan)
+    // Si la app queda abierta al pasar la medianoche, al volver al frente se
+    // comprueba el día de nuevo; la guardia evita repetir la pasada de hoy.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch { runAutoReadIfNeeded() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Si ya se registraron las lecturas de hoy, retiramos el recordatorio que
     // pudiera haber quedado visible de un día anterior o de una consulta hecha
     // justo después de que sonara el aviso de las 22:00.
     LaunchedEffect(state.logs) {
-        if (hasReadingToday(state.logs, 1) && hasReadingToday(state.logs, 2)) {
+        if (missingReadingsToday(state.logs).isEmpty()) {
             BalanceReadingReminderWorker.cancel(context)
         }
     }
