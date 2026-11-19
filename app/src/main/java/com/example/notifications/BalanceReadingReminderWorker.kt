@@ -11,8 +11,8 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.MainActivity
@@ -23,6 +23,7 @@ import com.example.domain.BalanceReadingReminder
 import com.example.domain.BalanceReadingSample
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
@@ -48,10 +49,14 @@ class BalanceReadingReminderWorker(
             BalanceReadingSample(planId = it.planId, timestampMs = it.timestamp)
         }
         val missingLineIds = BalanceReadingReminder.missingLineIds(readings, dayStart, dayEnd)
-        if (missingLineIds.isEmpty()) return Result.success()
+        if (missingLineIds.isNotEmpty() && canPostNotifications(context)) {
+            postNotification(context, missingLineIds)
+        }
 
-        if (!canPostNotifications(context)) return Result.success()
-        postNotification(context, missingLineIds)
+        // WorkManager cuenta el initialDelay antes del primer periodo, así que
+        // una tarea periódica de 24 h avisaría un día tarde. Encadenamos una
+        // tarea única y la reprogramamos aquí para el próximo día a las 22:00.
+        scheduleNext(context)
         return Result.success()
     }
 
@@ -135,12 +140,14 @@ class BalanceReadingReminderWorker(
         private const val CHANNEL_ID = "balance_reading_reminder"
         private const val NOTIFICATION_ID = 2002
         private const val REMINDER_HOUR = 22
-        private const val UNIQUE_WORK_NAME = "balance_reading_daily_reminder"
+        private const val UNIQUE_WORK_NAME = "balance_reading_daily_reminder_once"
+        private const val LEGACY_WORK_NAME = "balance_reading_daily_reminder"
 
-        private fun delayUntilNextReminder(
-            nowMs: Long = System.currentTimeMillis()
+        internal fun delayUntilNextReminder(
+            nowMs: Long = System.currentTimeMillis(),
+            timeZone: TimeZone = TimeZone.getDefault()
         ): Long {
-            val reminder = Calendar.getInstance().apply {
+            val reminder = Calendar.getInstance(timeZone).apply {
                 timeInMillis = nowMs
                 set(Calendar.HOUR_OF_DAY, REMINDER_HOUR)
                 set(Calendar.MINUTE, 0)
@@ -153,16 +160,28 @@ class BalanceReadingReminderWorker(
             return reminder.timeInMillis - nowMs
         }
 
-        /** Schedules the daily nudge for 22:00 local time. */
-        fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<BalanceReadingReminderWorker>(1, TimeUnit.DAYS)
+        private fun enqueueNext(context: Context, policy: ExistingWorkPolicy) {
+            val request = OneTimeWorkRequestBuilder<BalanceReadingReminderWorker>()
                 .setInitialDelay(delayUntilNextReminder(), TimeUnit.MILLISECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 UNIQUE_WORK_NAME,
-                ExistingPeriodicWorkPolicy.UPDATE,
+                policy,
                 request
             )
+        }
+
+        /** Arms the first 22:00 nudge; later runs are chained by the worker. */
+        fun schedule(context: Context) {
+            // La versión anterior dejó una tarea periódica con este nombre: la
+            // retiramos para que no avise un día tarde junto a la nueva cadena.
+            WorkManager.getInstance(context.applicationContext).cancelUniqueWork(LEGACY_WORK_NAME)
+            // KEEP evita que cada apertura de la app retrase un aviso ya pendiente.
+            enqueueNext(context, ExistingWorkPolicy.KEEP)
+        }
+
+        private fun scheduleNext(context: Context) {
+            enqueueNext(context, ExistingWorkPolicy.REPLACE)
         }
 
         /** Called when the app already has today's readings for both lines. */

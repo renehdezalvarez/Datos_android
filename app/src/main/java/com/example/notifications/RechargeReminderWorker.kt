@@ -11,8 +11,8 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.MainActivity
@@ -20,6 +20,7 @@ import com.example.R
 import com.example.data.local.AppDatabase
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
@@ -35,13 +36,16 @@ class RechargeReminderWorker(
     override suspend fun doWork(): Result {
         val context = applicationContext
         val dao = AppDatabase.getInstance(context).dataDao()
-        val plan = dao.getDataPlan(PREPAID_LINE_ID).first() ?: return Result.success()
-        val eligibleMs = plan.rechargeEligibleDateMs ?: return Result.success()
+        val plan = dao.getDataPlan(PREPAID_LINE_ID).first()
+        val eligibleMs = plan?.rechargeEligibleDateMs
 
-        if (startOfToday() < eligibleMs) return Result.success()
-        if (!canPostNotifications(context)) return Result.success()
+        if (eligibleMs != null && startOfToday() >= eligibleMs && canPostNotifications(context)) {
+            postNotification(context)
+        }
 
-        postNotification(context)
+        // Una tarea periódica con initialDelay se ejecuta tarde (el retardo se
+        // suma al primer periodo), así que encadenamos tareas únicas diarias.
+        scheduleNext(context)
         return Result.success()
     }
 
@@ -109,10 +113,14 @@ class RechargeReminderWorker(
         private const val NOTIFICATION_ID = 2003
         private const val PREPAID_LINE_ID = 2
         private const val REMINDER_HOUR = 9
-        private const val UNIQUE_WORK_NAME = "prepaid_recharge_daily_reminder"
+        private const val UNIQUE_WORK_NAME = "prepaid_recharge_daily_reminder_once"
+        private const val LEGACY_WORK_NAME = "prepaid_recharge_daily_reminder"
 
-        private fun delayUntilNextReminder(nowMs: Long = System.currentTimeMillis()): Long {
-            val reminder = Calendar.getInstance().apply {
+        internal fun delayUntilNextReminder(
+            nowMs: Long = System.currentTimeMillis(),
+            timeZone: TimeZone = TimeZone.getDefault()
+        ): Long {
+            val reminder = Calendar.getInstance(timeZone).apply {
                 timeInMillis = nowMs
                 set(Calendar.HOUR_OF_DAY, REMINDER_HOUR)
                 set(Calendar.MINUTE, 0)
@@ -125,16 +133,25 @@ class RechargeReminderWorker(
             return reminder.timeInMillis - nowMs
         }
 
-        /** Schedules the daily 09:00 local-time check. */
-        fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<RechargeReminderWorker>(1, TimeUnit.DAYS)
+        private fun enqueueNext(context: Context, policy: ExistingWorkPolicy) {
+            val request = OneTimeWorkRequestBuilder<RechargeReminderWorker>()
                 .setInitialDelay(delayUntilNextReminder(), TimeUnit.MILLISECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 UNIQUE_WORK_NAME,
-                ExistingPeriodicWorkPolicy.UPDATE,
+                policy,
                 request
             )
+        }
+
+        /** Arms the first 09:00 check; later runs are chained by the worker. */
+        fun schedule(context: Context) {
+            WorkManager.getInstance(context.applicationContext).cancelUniqueWork(LEGACY_WORK_NAME)
+            enqueueNext(context, ExistingWorkPolicy.KEEP)
+        }
+
+        private fun scheduleNext(context: Context) {
+            enqueueNext(context, ExistingWorkPolicy.REPLACE)
         }
 
         /** Called when a new prepaid package is registered. */

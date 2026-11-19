@@ -54,7 +54,8 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   lectura registrada en el día, aparece una notificación: *"Consulta tu saldo
   para afinar el pronóstico"*. El aviso solo abre la app: no marca el código
   USSD ni activa la captura de accesibilidad en segundo plano. Se retira solo
-  al registrar las lecturas pendientes.
+  al registrar las lecturas pendientes. El aviso se reprograma solo para el
+  siguiente día a las 22:00; abrir la app no lo retrasa.
 - **Historial de lecturas y consumo diario** por línea: lecturas con notas
   (editables/eliminables) y una vista de **consumo diario** calculada a partir
   de las diferencias entre lecturas registradas cada día.
