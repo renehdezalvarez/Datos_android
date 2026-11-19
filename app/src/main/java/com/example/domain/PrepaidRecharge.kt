@@ -17,4 +17,15 @@ object PrepaidRecharge {
         checkedCycleStartMs: Long?,
         purchaseTimestamp: Long
     ): Boolean = planType == "PREPAID_35" && checkedCycleStartMs != purchaseTimestamp
+
+    /**
+     * Ajustar el día o recibir "quedan N días" reancla el paquete, pero no es
+     * una compra nueva: movemos la marca de "ya consultado" con el ancla para
+     * no volver a pedir la fecha de recarga. Null sigue significando "nunca
+     * se pidió" y, por tanto, debe consultarse una vez.
+     */
+    fun reanchoredCheckedCycleStart(
+        checkedCycleStartMs: Long?,
+        newPurchaseTimestamp: Long
+    ): Long? = checkedCycleStartMs?.let { newPurchaseTimestamp }
 }

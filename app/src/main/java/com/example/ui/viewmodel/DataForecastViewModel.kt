@@ -244,11 +244,18 @@ class DataForecastViewModel(
             // "quedan N días" of a totalCycleDays package -> day = total - remaining + 1.
             newCycleDay = (updated.totalCycleDays - daysRemaining + 1)
                 .coerceIn(1, updated.totalCycleDays)
+            // Keep the purchase timestamp consistent with the reading so
+            // the countdown keeps flowing on its own afterwards.
+            val newPurchaseTimestamp = System.currentTimeMillis() - (newCycleDay - 1) * DAY_MS
             updated = updated.copy(
                 customCurrentDay = newCycleDay,
-                // Keep the purchase timestamp consistent with the reading so
-                // the countdown keeps flowing on its own afterwards.
-                purchaseTimestamp = System.currentTimeMillis() - (newCycleDay - 1) * DAY_MS
+                purchaseTimestamp = newPurchaseTimestamp,
+                // Reanclar el día no es una compra nueva: conservamos la
+                // consulta de recarga ya hecha para no repetirla.
+                rechargeCheckedCycleStartMs = PrepaidRecharge.reanchoredCheckedCycleStart(
+                    updated.rechargeCheckedCycleStartMs,
+                    newPurchaseTimestamp
+                )
             )
         }
 
@@ -490,6 +497,7 @@ class DataForecastViewModel(
         }
         viewModelScope.launch {
             val current = repository.getDataPlan(lineId).firstOrNull() ?: DataPlanEntity(id = lineId)
+            val newPurchaseTimestamp = System.currentTimeMillis() - (currentDay - 1) * DAY_MS
             repository.saveOrUpdatePlan(
                 current.copy(
                     customCurrentDay = currentDay,
@@ -499,7 +507,13 @@ class DataForecastViewModel(
                     // Anchor the adjustment so the implied calendar-day
                     // correction (chosen day vs. the adjustment date) can be
                     // recovered later; the day still advances on its own.
-                    purchaseTimestamp = System.currentTimeMillis() - (currentDay - 1) * DAY_MS
+                    purchaseTimestamp = newPurchaseTimestamp,
+                    // Ajustar días no cambia de paquete: la fecha de recarga
+                    // ya consultada sigue siendo válida para este ciclo.
+                    rechargeCheckedCycleStartMs = PrepaidRecharge.reanchoredCheckedCycleStart(
+                        current.rechargeCheckedCycleStartMs,
+                        newPurchaseTimestamp
+                    )
                 )
             )
         }
