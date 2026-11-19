@@ -41,6 +41,7 @@ class UpdateManager(context: Context) {
     val state: StateFlow<UpdateUiState> = _state.asStateFlow()
 
     init {
+        discardStaleUpdate()
         refresh()
         checkIfNeeded()
 
@@ -100,6 +101,7 @@ class UpdateManager(context: Context) {
 
     fun refresh() {
         scope.launch {
+            discardStaleUpdate()
             val path = prefs.downloadedPath?.takeIf { File(it).isFile }
             _state.update {
                 it.copy(
@@ -109,6 +111,37 @@ class UpdateManager(context: Context) {
                 )
             }
         }
+    }
+
+    /** Elimina tarjeta, descarga y aviso de una oferta que ya no aplica. */
+    private fun clearOffer(message: String? = null) {
+        prefs.availableInfo = null
+        prefs.clearDownload()
+        UpdateNotifier.cancel(appContext)
+        _state.update {
+            it.copy(
+                info = null,
+                downloadedPath = null,
+                status = UpdateStatus.IDLE,
+                progress = 0,
+                message = message
+            )
+        }
+    }
+
+    /**
+     * An offer left over from a previous install must not outlive the version
+     * that replaced it, even while the check is throttled or offline.
+     */
+    private fun discardStaleUpdate() {
+        val info = prefs.availableInfo ?: return
+        if (UpdateVersions.shouldOfferUpdate(
+                info.versionCode,
+                BuildConfig.VERSION_CODE,
+                prefs.skippedVersionCode
+            )
+        ) return
+        clearOffer()
     }
 
     /** Cheap on app start: the periodic worker and this call share the throttle. */
@@ -129,30 +162,26 @@ class UpdateManager(context: Context) {
             is UpdateCheckResult.Found -> {
                 val info = result.info
                 val isNewer = UpdateVersions.isNewer(info.versionCode, BuildConfig.VERSION_CODE)
+                val shouldOffer = UpdateVersions.shouldOfferUpdate(
+                    info.versionCode,
+                    BuildConfig.VERSION_CODE,
+                    prefs.skippedVersionCode
+                )
                 when {
-                    isNewer && prefs.skippedVersionCode != info.versionCode -> {
+                    shouldOffer -> {
                         prefs.availableInfo = info
                         _state.update {
                             it.copy(info = info, status = UpdateStatus.IDLE, message = null)
                         }
                     }
 
-                    isNewer -> _state.update {
-                        it.copy(status = UpdateStatus.IDLE, message = null)
+                    isNewer -> {
+                        // Versión más nueva, pero omitida: no dejamos una descarga vieja visible.
+                        clearOffer()
                     }
 
                     else -> {
-                        prefs.availableInfo = null
-                        prefs.clearDownload()
-                        UpdateNotifier.cancel(appContext)
-                        _state.update {
-                            it.copy(
-                                info = null,
-                                downloadedPath = null,
-                                status = UpdateStatus.IDLE,
-                                message = if (force) "Ya tienes la versión más reciente." else null
-                            )
-                        }
+                        clearOffer(if (force) "Ya tienes la versión más reciente." else null)
                     }
                 }
             }

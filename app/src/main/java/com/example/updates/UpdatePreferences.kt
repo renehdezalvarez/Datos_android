@@ -2,6 +2,7 @@ package com.example.updates
 
 import android.content.Context
 import androidx.core.content.edit
+import com.example.domain.UpdateVersions
 
 /** Small persisted state for the self-update flow (no Room schema changes). */
 class UpdatePreferences(context: Context) {
@@ -73,6 +74,21 @@ class UpdatePreferences(context: Context) {
     fun clearDownload() {
         downloadedPath = null
         downloadedSha256 = null
+    }
+
+    /**
+     * Drops a persisted offer that is no longer valid (already installed or
+     * skipped). Returns true when something was removed so callers can also
+     * cancel the notification and reset the visible card.
+     */
+    fun clearIfNotApplicable(installedVersionCode: Int): Boolean {
+        val info = availableInfo ?: return false
+        if (UpdateVersions.shouldOfferUpdate(info.versionCode, installedVersionCode, skippedVersionCode)) {
+            return false
+        }
+        availableInfo = null
+        clearDownload()
+        return true
     }
 
     companion object {

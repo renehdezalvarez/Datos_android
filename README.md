@@ -180,7 +180,9 @@ Cada release publica un `update.json` como asset con `versionCode`,
 `versionName`, `tag`, nombre del APK, `sha256` y tamaño. La versión se compara
 por `versionCode`, así que el formato del `versionName` no afecta la detección.
 El botón **Buscar actualizaciones** fuerza una comprobación; **Ahora no** omite
-esa versión hasta la siguiente release.
+esa versión hasta la siguiente release. Si la versión publicada deja de ser mayor
+que la instalada (por ejemplo después de instalar), la tarjeta, la descarga y la
+notificación pendientes se descartan automáticamente.
 
 ## 📄 Licencia
 

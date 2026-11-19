@@ -24,16 +24,32 @@ class UpdateCheckWorker(
         if (!BuildConfig.DEBUG) {
             val context = applicationContext
             val prefs = UpdatePreferences(context)
+
+            // Si la versión ofrecida ya está instalada (o fue omitida), limpiamos
+            // tarjeta y notificación aunque GitHub no responda en esta pasada.
+            if (prefs.clearIfNotApplicable(BuildConfig.VERSION_CODE)) {
+                UpdateNotifier.cancel(context)
+            }
+
             val result = UpdateChecker().check()
             prefs.lastCheckMs = System.currentTimeMillis()
 
             if (result is UpdateCheckResult.Found) {
                 val info = result.info
-                val isNewer = UpdateVersions.isNewer(info.versionCode, BuildConfig.VERSION_CODE)
-                val notSkipped = prefs.skippedVersionCode != info.versionCode
-                if (isNewer && notSkipped) {
+                if (UpdateVersions.shouldOfferUpdate(
+                        info.versionCode,
+                        BuildConfig.VERSION_CODE,
+                        prefs.skippedVersionCode
+                    )
+                ) {
                     prefs.availableInfo = info
                     UpdateNotifier.postAvailable(context, info)
+                } else {
+                    // La release ya no ofrece nada instalable: descartamos
+                    // tarjeta, descarga y aviso pendientes.
+                    prefs.availableInfo = null
+                    prefs.clearDownload()
+                    UpdateNotifier.cancel(context)
                 }
             }
         }

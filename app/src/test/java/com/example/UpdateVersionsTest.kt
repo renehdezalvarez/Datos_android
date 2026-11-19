@@ -17,4 +17,33 @@ class UpdateVersionsTest {
         assertFalse(UpdateVersions.isNewer(publishedVersionCode = 25, installedVersionCode = 25))
         assertFalse(UpdateVersions.isNewer(publishedVersionCode = 24, installedVersionCode = 25))
     }
+
+    @Test
+    fun `newer code is offered unless the user skipped it`() {
+        assertTrue(
+            UpdateVersions.shouldOfferUpdate(
+                publishedVersionCode = 26,
+                installedVersionCode = 25,
+                skippedVersionCode = 0
+            )
+        )
+        assertFalse(
+            UpdateVersions.shouldOfferUpdate(
+                publishedVersionCode = 26,
+                installedVersionCode = 25,
+                skippedVersionCode = 26
+            )
+        )
+    }
+
+    @Test
+    fun `same installed code is never offered again`() {
+        assertFalse(
+            UpdateVersions.shouldOfferUpdate(
+                publishedVersionCode = 28,
+                installedVersionCode = 28,
+                skippedVersionCode = 0
+            )
+        )
+    }
 }
