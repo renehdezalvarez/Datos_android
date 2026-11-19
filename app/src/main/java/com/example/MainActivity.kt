@@ -215,6 +215,11 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
     // no repetirla en cada recomposición) y guardia contra corridas simultáneas.
     var lastAutoReadDay by rememberSaveable { mutableIntStateOf(-1) }
     var autoReadRunning by remember { mutableStateOf(false) }
+    // La consulta automática de fecha de recarga (*222*732#) es independiente de
+    // las lecturas de saldo y debe intentarse solo una vez al abrir la app. Sin
+    // esta guardia, volver del marcador tras "Consultar Saldo" (ON_RESUME) la
+    // repetiría mientras falte cerrar el día de lecturas.
+    var rechargeAutoQueryAttempted by remember { mutableStateOf(false) }
 
     fun currentDayKey(): Int = Calendar.getInstance().let {
         it.get(Calendar.YEAR) * 1000 + it.get(Calendar.DAY_OF_YEAR)
@@ -333,8 +338,14 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
             if (started2) waitUntilIdle()
 
             // Prepaid only: one silent *222*732# query per purchase cycle.
-            val current3 = viewModel.uiState.value
-            trySilentRechargeQuery(current3.line2.plan)
+            // It runs once per app open: returning from the dialer or from
+            // settings triggers ON_RESUME, which must retry missing balance
+            // readings but must not issue a separate recharge-date query.
+            if (!rechargeAutoQueryAttempted) {
+                rechargeAutoQueryAttempted = true
+                val current3 = viewModel.uiState.value
+                trySilentRechargeQuery(current3.line2.plan)
+            }
 
             // Solo cerramos el día cuando ambas líneas tienen lectura de hoy.
             // Si faltó permiso, SIM o respuesta del operador, un próximo
