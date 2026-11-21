@@ -37,8 +37,10 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   aceptación cuando el operador lo pide. Usa la misma SIM
   configurada para la línea 2, lee el SMS de confirmación de ETECSA y registra
   el paquete solo cuando ese SMS confirma la compra (también se puede pegar el
-  SMS a mano). Si la API de telefonía no responde, el lector de accesibilidad
-  sirve de respaldo y siempre queda la opción de registrar la compra
+  SMS a mano). Si la API de telefonía no responde, la app pasa al marcador y al
+  lector de accesibilidad sin insistir en la API en cada paso: marca el código,
+  lee la respuesta del operador y cierra el diálogo USSD para que el siguiente
+  código no quede bloqueado. Siempre queda la opción de registrar la compra
   manualmente.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El

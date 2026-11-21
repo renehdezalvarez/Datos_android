@@ -106,6 +106,8 @@ fun UssdPurchaseDialog(
     var sessionCounter by remember { mutableStateOf(0L) }
     var active by remember { mutableStateOf<ActivePurchaseRequest?>(null) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var apiUsable by remember { mutableStateOf(systemApiAvailable) }
+    var assistedNoticeShown by remember { mutableStateOf(false) }
 
     var rawMenuText by remember { mutableStateOf("") }
     var menuOptions by remember { mutableStateOf<List<PackageOption>>(emptyList()) }
@@ -174,7 +176,11 @@ fun UssdPurchaseDialog(
     }
 
     fun startAssisted(session: Long, stage: PurchaseStage, code: String, option: PackageOption?) {
-        UssdCaptureHolder.clearPurchase()
+        // Once the API fails, stay on the assisted route for the rest of this
+        // purchase instead of retrying (and complaining) at every step.
+        apiUsable = false
+        // The catcher was already armed before the API attempt: keep it armed
+        // so a response shown by the carrier is not cleared here.
         UssdCaptureHolder.armPurchase()
         active = ActivePurchaseRequest(session, stage, System.currentTimeMillis(), option)
         UssdDialer.dial(
@@ -183,18 +189,21 @@ fun UssdPurchaseDialog(
             directCall = UssdDialer.hasCallPermission(context),
             selectedSlot = selectedSimSlot
         )
-        Toast.makeText(
-            context,
-            when (stage) {
-                PurchaseStage.MENU ->
-                    "La API no respondió: marca el código y elige la opción; la app leerá la respuesta."
-                PurchaseStage.SELECT ->
-                    "La API no respondió: se marcó la opción; confirma en el diálogo si el operador lo pide."
-                PurchaseStage.SMS_WAIT ->
-                    "La API no respondió: se marcó el código final. Espera el SMS de confirmación."
-            },
-            Toast.LENGTH_LONG
-        ).show()
+        if (!assistedNoticeShown) {
+            Toast.makeText(
+                context,
+                when (stage) {
+                    PurchaseStage.MENU ->
+                        "Marcando el menú de paquetes con el operador. La app leerá la respuesta automáticamente."
+                    PurchaseStage.SELECT ->
+                        "Marcando la opción elegida. La app leerá la respuesta automáticamente."
+                    PurchaseStage.SMS_WAIT ->
+                        "Marcando la confirmación final. Espera el SMS de ETECSA."
+                },
+                Toast.LENGTH_LONG
+            ).show()
+            assistedNoticeShown = true
+        }
     }
 
     fun handleMenuResponse(session: Long, text: String) {
@@ -235,7 +244,7 @@ fun UssdPurchaseDialog(
     fun sendFinalConfirmation(session: Long, option: PackageOption) {
         runWithPermissions {
             UssdCaptureHolder.clearPurchase()
-            UssdCaptureHolder.disarmPurchase()
+            UssdCaptureHolder.armPurchase()
             val code = PrepaidPurchase.confirmationCode(option.number)
             val startedAt = System.currentTimeMillis()
             PurchaseSmsHolder.arm(session, startedAt)
@@ -245,7 +254,7 @@ fun UssdPurchaseDialog(
             step = PurchaseStep.WaitingSms(null)
 
             val subscriptionId = resolveSubscriptionId()
-            val canUseApi = systemApiAvailable && (selectedSimSlot == null || subscriptionId != null)
+            val canUseApi = apiUsable && (selectedSimSlot == null || subscriptionId != null)
             if (!canUseApi) {
                 startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
                 return@runWithPermissions
@@ -308,14 +317,16 @@ fun UssdPurchaseDialog(
     fun requestMenu() {
         runWithPermissions {
             UssdCaptureHolder.clearPurchase()
-            UssdCaptureHolder.disarmPurchase()
+            UssdCaptureHolder.armPurchase()
             sessionCounter += 1
             val session = sessionCounter
+            apiUsable = systemApiAvailable
+            assistedNoticeShown = false
             active = ActivePurchaseRequest(session, PurchaseStage.MENU, System.currentTimeMillis(), null)
             step = PurchaseStep.LoadingMenu
 
             val subscriptionId = resolveSubscriptionId()
-            val canUseApi = systemApiAvailable && (selectedSimSlot == null || subscriptionId != null)
+            val canUseApi = apiUsable && (selectedSimSlot == null || subscriptionId != null)
             if (!canUseApi) {
                 startAssisted(session, PurchaseStage.MENU, PrepaidPurchase.MENU_CODE, null)
                 return@runWithPermissions
@@ -369,7 +380,7 @@ fun UssdPurchaseDialog(
         }
         runWithPermissions {
             UssdCaptureHolder.clearPurchase()
-            UssdCaptureHolder.disarmPurchase()
+            UssdCaptureHolder.armPurchase()
             sessionCounter += 1
             val session = sessionCounter
             val code = PrepaidPurchase.selectionCode(option.number)
@@ -377,7 +388,7 @@ fun UssdPurchaseDialog(
             step = PurchaseStep.Purchasing
 
             val subscriptionId = resolveSubscriptionId()
-            val canUseApi = systemApiAvailable && (selectedSimSlot == null || subscriptionId != null)
+            val canUseApi = apiUsable && (selectedSimSlot == null || subscriptionId != null)
             if (!canUseApi) {
                 startAssisted(session, PurchaseStage.SELECT, code, option)
                 return@runWithPermissions

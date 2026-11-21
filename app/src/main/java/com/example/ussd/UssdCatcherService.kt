@@ -18,8 +18,8 @@ import com.example.domain.UssdParser
  *
  * It only inspects windows while a consultation or a package purchase is
  * pending (see [UssdCaptureHolder.consultationActive] and
- * [UssdCaptureHolder.purchaseActive]). Balance readings are dismissed after
- * capture; purchase menus are left open so the user can still act on them.
+ * [UssdCaptureHolder.purchaseActive]). Every response is dismissed after
+ * capture so the next USSD code of the purchase flow can be dialed cleanly.
  */
 class UssdCatcherService : AccessibilityService() {
 
@@ -58,10 +58,13 @@ class UssdCatcherService : AccessibilityService() {
             return
         }
 
-        // Purchase menus must stay open: the user still needs to pick an
-        // option, and the dialog may ask for the final confirmation digit.
+        // Purchase menus/confirmations are read into the app dialog, so the
+        // carrier window is no longer needed. Closing it avoids blocking the
+        // next USSD code (option selection and final confirmation).
         if (purchaseActive && text.length >= 10 && text.any { it.isDigit() }) {
-            UssdCaptureHolder.pushPurchase(text)
+            if (UssdCaptureHolder.pushPurchase(text)) {
+                dismissUssdDialog(root)
+            }
         }
     }
 
