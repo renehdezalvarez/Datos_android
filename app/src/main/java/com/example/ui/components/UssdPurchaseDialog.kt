@@ -69,7 +69,7 @@ private sealed interface PurchaseStep {
     data class Failure(val message: String, val raw: String?) : PurchaseStep
 }
 
-private enum class PurchaseStage { MENU, SELECT, SMS_WAIT }
+private enum class PurchaseStage { MENU, SMS_WAIT }
 
 private data class ActivePurchaseRequest(
     val session: Long,
@@ -82,10 +82,11 @@ private data class ActivePurchaseRequest(
  * Buys a prepaid package for line 2 through the carrier's USSD menu.
  *
  * The menu response is parsed into in-app options. Once the user picks one
- * and confirms, the app dials the composed code with the final `1`; the
- * official telephony API is tried first and the accessibility catcher is the
- * fallback. The final confirmation arrives by SMS, so the app listens for it
- * (or lets the user paste it). Nothing is registered until that SMS is read.
+ * and confirms, the app dials the composed code with the final `1` directly
+ * (no need to read the intermediate "press 1" prompt); the official telephony
+ * API is tried first and the accessibility catcher is the fallback. The final
+ * confirmation arrives by SMS, so the app listens for it (or lets the user
+ * paste it). Nothing is registered until that SMS is read.
  */
 @Composable
 fun UssdPurchaseDialog(
@@ -182,7 +183,9 @@ fun UssdPurchaseDialog(
         // The catcher was already armed before the API attempt: keep it armed
         // so a response shown by the carrier is not cleared here.
         UssdCaptureHolder.armPurchase()
-        active = ActivePurchaseRequest(session, stage, System.currentTimeMillis(), option)
+        // Keep the original timestamp: captures/SMS from this same attempt
+        // must not be discarded just because the assisted dialer took over.
+        active = ActivePurchaseRequest(session, stage, active?.startedAt ?: System.currentTimeMillis(), option)
         UssdDialer.dial(
             context,
             code,
@@ -195,10 +198,8 @@ fun UssdPurchaseDialog(
                 when (stage) {
                     PurchaseStage.MENU ->
                         "Marcando el menú de paquetes con el operador. La app leerá la respuesta automáticamente."
-                    PurchaseStage.SELECT ->
-                        "Marcando la opción elegida. La app leerá la respuesta automáticamente."
                     PurchaseStage.SMS_WAIT ->
-                        "Marcando la confirmación final. Espera el SMS de ETECSA."
+                        "Marcando la compra. Espera el SMS de confirmación de ETECSA."
                 },
                 Toast.LENGTH_LONG
             ).show()
@@ -238,62 +239,6 @@ fun UssdPurchaseDialog(
             rawLine = text.trim()
         )
         step = PurchaseStep.Success(confirmedOption, text)
-    }
-
-    /** Sends the final `1`, then waits for the carrier's confirmation SMS. */
-    fun sendFinalConfirmation(session: Long, option: PackageOption) {
-        runWithPermissions {
-            UssdCaptureHolder.clearPurchase()
-            UssdCaptureHolder.armPurchase()
-            val code = PrepaidPurchase.confirmationCode(option.number)
-            val startedAt = System.currentTimeMillis()
-            PurchaseSmsHolder.arm(session, startedAt)
-            active = ActivePurchaseRequest(session, PurchaseStage.SMS_WAIT, startedAt, option)
-            smsText = ""
-            ussdAckText = ""
-            step = PurchaseStep.WaitingSms(null)
-
-            val subscriptionId = resolveSubscriptionId()
-            val canUseApi = apiUsable && (selectedSimSlot == null || subscriptionId != null)
-            if (!canUseApi) {
-                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
-                return@runWithPermissions
-            }
-            val started = UssdSystemApi.request(context, code, subscriptionId) { result ->
-                if (active?.session != session) return@request
-                when (result) {
-                    is UssdSystemApi.Result.Success -> {
-                        // The USSD answer is only an acknowledgement: the real
-                        // confirmation arrives later by SMS.
-                        ussdAckText = result.response.trim()
-                        step = PurchaseStep.WaitingSms(ussdAckText)
-                    }
-                    is UssdSystemApi.Result.Failure,
-                    UssdSystemApi.Result.Timeout -> startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
-                }
-            }
-            if (!started) {
-                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
-            }
-        }
-    }
-
-    fun handlePurchaseResponse(session: Long, text: String) {
-        val request = active ?: return
-        if (request.session != session) return
-        val result = UssdPurchaseParser.parseConfirmation(text)
-        UssdCaptureHolder.disarmPurchase()
-
-        // The carrier asks for the final `1` after the option is selected.
-        if (result.needsConfirmation && request.stage == PurchaseStage.SELECT) {
-            request.option?.let { sendFinalConfirmation(session, it) }
-            return
-        }
-        // After the final digit the purchase is confirmed by SMS, not here.
-        if (request.stage == PurchaseStage.SMS_WAIT) return
-
-        active = null
-        showResult(result, text)
     }
 
     /** Applies a carrier SMS (auto-captured or pasted by the user). */
@@ -378,31 +323,43 @@ fun UssdPurchaseDialog(
             Toast.makeText(context, "Indica el tamaño del paquete en GB.", Toast.LENGTH_SHORT).show()
             return
         }
+        // Disable the button while permissions are being requested.
+        step = PurchaseStep.Purchasing
         runWithPermissions {
             UssdCaptureHolder.clearPurchase()
             UssdCaptureHolder.armPurchase()
             sessionCounter += 1
             val session = sessionCounter
-            val code = PrepaidPurchase.selectionCode(option.number)
-            active = ActivePurchaseRequest(session, PurchaseStage.SELECT, System.currentTimeMillis(), option)
-            step = PurchaseStep.Purchasing
+            // The carrier accepts the whole purchase in this one code. There
+            // is no need to dial the option first and read the "press 1" prompt.
+            val code = PrepaidPurchase.confirmationCode(option.number)
+            val startedAt = System.currentTimeMillis()
+            PurchaseSmsHolder.arm(session, startedAt)
+            active = ActivePurchaseRequest(session, PurchaseStage.SMS_WAIT, startedAt, option)
+            smsText = ""
+            ussdAckText = ""
+            step = PurchaseStep.WaitingSms(null)
 
             val subscriptionId = resolveSubscriptionId()
             val canUseApi = apiUsable && (selectedSimSlot == null || subscriptionId != null)
             if (!canUseApi) {
-                startAssisted(session, PurchaseStage.SELECT, code, option)
+                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
                 return@runWithPermissions
             }
             val started = UssdSystemApi.request(context, code, subscriptionId) { result ->
                 if (active?.session != session) return@request
                 when (result) {
-                    is UssdSystemApi.Result.Success -> handlePurchaseResponse(session, result.response)
+                    is UssdSystemApi.Result.Success -> {
+                        // Only an acknowledgement: the real confirmation is the SMS.
+                        ussdAckText = result.response.trim()
+                        step = PurchaseStep.WaitingSms(ussdAckText)
+                    }
                     is UssdSystemApi.Result.Failure,
-                    UssdSystemApi.Result.Timeout -> startAssisted(session, PurchaseStage.SELECT, code, option)
+                    UssdSystemApi.Result.Timeout -> startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
                 }
             }
             if (!started) {
-                startAssisted(session, PurchaseStage.SELECT, code, option)
+                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
             }
         }
     }
@@ -424,7 +381,6 @@ fun UssdPurchaseDialog(
             if (capture == null || capture.timestampMs < current.startedAt) return@collect
             when (current.stage) {
                 PurchaseStage.MENU -> handleMenuResponse(current.session, capture.text)
-                PurchaseStage.SELECT -> handlePurchaseResponse(current.session, capture.text)
                 PurchaseStage.SMS_WAIT -> Unit
             }
         }
@@ -627,9 +583,8 @@ fun UssdPurchaseDialog(
                             )
                         }
                         Text(
-                            text = "Primero se marca ${PrepaidPurchase.selectionCode(current.option.number)} " +
-                                "y, cuando el operador pida confirmar, " +
-                                "${PrepaidPurchase.confirmationCode(current.option.number)}.",
+                            text = "Se marcará ${PrepaidPurchase.confirmationCode(current.option.number)}. " +
+                                "Ese código ya incluye la aceptación de la compra; después llega el SMS.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

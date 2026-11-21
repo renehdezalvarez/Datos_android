@@ -53,7 +53,8 @@ object UssdPurchaseParser {
     )
     private val smsSuccessWords = listOf(
         "se ha comprado", "se desconto", "se activa", "plan nacional",
-        "compra confirmada", "paquete activado"
+        "compra confirmada", "compra realizada", "compra exitosa",
+        "paquete activado", "se ha adquirido", "plan adquirido", "se activo"
     )
     private val smsContextWords = listOf(
         "paquete", "plan", "compra", "recarga", "etecsa", "desconto"

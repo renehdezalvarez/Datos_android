@@ -148,4 +148,29 @@ class UssdPurchaseParserTest {
         assertFalse(result.success)
         assertNull(result.sizeGB)
     }
+
+    @Test
+    fun `placeholder dialog is not mistaken for a menu or a confirmation`() {
+        val placeholder = "Usted marco *133*1*4#"
+        val result = UssdPurchaseParser.parseConfirmation(placeholder)
+
+        assertTrue(UssdPurchaseParser.parseMenu(placeholder).isEmpty())
+        assertFalse(result.success)
+        assertFalse(result.needsConfirmation)
+        assertFalse(result.failure)
+    }
+
+    @Test
+    fun `a completed purchase SMS variant is accepted`() {
+        val sms = "ETECSA: Compra realizada con exito. Plan 4.5GB activo por 35 dias, " +
+            "se desconto 240.00 CUP. Saldo actual 12.00 CUP"
+
+        val result = UssdPurchaseParser.parseSmsConfirmation(sms)
+
+        assertTrue(result.success)
+        assertFalse(result.failure)
+        assertEquals(4.5, result.sizeGB!!, 0.001)
+        assertEquals(35, result.days)
+        assertEquals("240.00", result.price)
+    }
 }

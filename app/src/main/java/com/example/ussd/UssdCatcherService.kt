@@ -7,6 +7,7 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.domain.UssdParser
+import com.example.domain.UssdPurchaseParser
 
 /**
  * Accessibility fallback that reads the carrier's USSD response dialog when
@@ -58,10 +59,10 @@ class UssdCatcherService : AccessibilityService() {
             return
         }
 
-        // Purchase menus/confirmations are read into the app dialog, so the
-        // carrier window is no longer needed. Closing it avoids blocking the
-        // next USSD code (option selection and final confirmation).
-        if (purchaseActive && text.length >= 10 && text.any { it.isDigit() }) {
+        // Only a real menu / confirmation may be consumed. Without this filter
+        // the placeholder "Usted marcó *133..." (or even this app's own text)
+        // would be taken as the response and the flow would end prematurely.
+        if (purchaseActive && isPurchaseResponse(text)) {
             if (UssdCaptureHolder.pushPurchase(text)) {
                 dismissUssdDialog(root)
             }
@@ -70,6 +71,13 @@ class UssdCatcherService : AccessibilityService() {
 
     override fun onInterrupt() {
         // Nothing to do.
+    }
+
+    /** True only for a parsable carrier menu, prompt, success or failure. */
+    private fun isPurchaseResponse(text: String): Boolean {
+        if (UssdPurchaseParser.parseMenu(text).isNotEmpty()) return true
+        val confirmation = UssdPurchaseParser.parseConfirmation(text)
+        return confirmation.needsConfirmation || confirmation.success || confirmation.failure
     }
 
     /** Walks the node tree and concatenates every text/contentDescription. */

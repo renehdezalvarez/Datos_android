@@ -33,14 +33,14 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   El aviso de "último día" del paquete sigue igual.
 - **Compra de paquetes por USSD (línea prepaga)**: **Nueva Compra** consulta
   `*133*1*4#`, muestra en la app los paquetes detectados y, tras elegir uno y
-  confirmar, marca primero la opción y luego el código completo con el `1` de
-  aceptación cuando el operador lo pide. Usa la misma SIM
-  configurada para la línea 2, lee el SMS de confirmación de ETECSA y registra
-  el paquete solo cuando ese SMS confirma la compra (también se puede pegar el
-  SMS a mano). Si la API de telefonía no responde, la app pasa al marcador y al
-  lector de accesibilidad sin insistir en la API en cada paso: marca el código,
-  lee la respuesta del operador y cierra el diálogo USSD para que el siguiente
-  código no quede bloqueado. Siempre queda la opción de registrar la compra
+  confirmar, marca directamente el código completo con el `1` de aceptación
+  (por ejemplo `*133*1*4*2*1#`). No hace falta leer el aviso intermedio del
+  operador. Usa la misma SIM configurada para la línea 2, lee el SMS de
+  confirmación de ETECSA y registra el paquete solo cuando ese SMS confirma la
+  compra (también se puede pegar el SMS a mano). Si la API de telefonía no
+  responde, la app pasa al marcador y al lector de accesibilidad sin insistir en
+  la API en cada paso: marca el código, lee solo una respuesta real del menú y
+  cierra el diálogo USSD. Siempre queda la opción de registrar la compra
   manualmente.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El
