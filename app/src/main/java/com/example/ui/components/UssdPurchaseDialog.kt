@@ -231,6 +231,44 @@ fun UssdPurchaseDialog(
         step = PurchaseStep.Success(confirmedOption, text)
     }
 
+    /** Sends the final `1`, then waits for the carrier's confirmation SMS. */
+    fun sendFinalConfirmation(session: Long, option: PackageOption) {
+        runWithPermissions {
+            UssdCaptureHolder.clearPurchase()
+            UssdCaptureHolder.disarmPurchase()
+            val code = PrepaidPurchase.confirmationCode(option.number)
+            val startedAt = System.currentTimeMillis()
+            PurchaseSmsHolder.arm(session, startedAt)
+            active = ActivePurchaseRequest(session, PurchaseStage.SMS_WAIT, startedAt, option)
+            smsText = ""
+            ussdAckText = ""
+            step = PurchaseStep.WaitingSms(null)
+
+            val subscriptionId = resolveSubscriptionId()
+            val canUseApi = systemApiAvailable && (selectedSimSlot == null || subscriptionId != null)
+            if (!canUseApi) {
+                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
+                return@runWithPermissions
+            }
+            val started = UssdSystemApi.request(context, code, subscriptionId) { result ->
+                if (active?.session != session) return@request
+                when (result) {
+                    is UssdSystemApi.Result.Success -> {
+                        // The USSD answer is only an acknowledgement: the real
+                        // confirmation arrives later by SMS.
+                        ussdAckText = result.response.trim()
+                        step = PurchaseStep.WaitingSms(ussdAckText)
+                    }
+                    is UssdSystemApi.Result.Failure,
+                    UssdSystemApi.Result.Timeout -> startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
+                }
+            }
+            if (!started) {
+                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
+            }
+        }
+    }
+
     fun handlePurchaseResponse(session: Long, text: String) {
         val request = active ?: return
         if (request.session != session) return
@@ -354,44 +392,6 @@ fun UssdPurchaseDialog(
             }
             if (!started) {
                 startAssisted(session, PurchaseStage.SELECT, code, option)
-            }
-        }
-    }
-
-    /** Sends the final `1`, then waits for the carrier's confirmation SMS. */
-    fun sendFinalConfirmation(session: Long, option: PackageOption) {
-        runWithPermissions {
-            UssdCaptureHolder.clearPurchase()
-            UssdCaptureHolder.disarmPurchase()
-            val code = PrepaidPurchase.confirmationCode(option.number)
-            val startedAt = System.currentTimeMillis()
-            PurchaseSmsHolder.arm(session, startedAt)
-            active = ActivePurchaseRequest(session, PurchaseStage.SMS_WAIT, startedAt, option)
-            smsText = ""
-            ussdAckText = ""
-            step = PurchaseStep.WaitingSms(null)
-
-            val subscriptionId = resolveSubscriptionId()
-            val canUseApi = systemApiAvailable && (selectedSimSlot == null || subscriptionId != null)
-            if (!canUseApi) {
-                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
-                return@runWithPermissions
-            }
-            val started = UssdSystemApi.request(context, code, subscriptionId) { result ->
-                if (active?.session != session) return@request
-                when (result) {
-                    is UssdSystemApi.Result.Success -> {
-                        // The USSD answer is only an acknowledgement: the real
-                        // confirmation arrives later by SMS.
-                        ussdAckText = result.response.trim()
-                        step = PurchaseStep.WaitingSms(ussdAckText)
-                    }
-                    is UssdSystemApi.Result.Failure,
-                    UssdSystemApi.Result.Timeout -> startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
-                }
-            }
-            if (!started) {
-                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
             }
         }
     }
