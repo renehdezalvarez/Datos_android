@@ -34,7 +34,7 @@ object UssdPurchaseParser {
     private val mbPattern = Regex("""(?i)(\d+(?:[.,]\d+)?)\s*(?:MB|MIB|MEGAS?)\b""")
     private val daysPattern = Regex("""(?i)(\d{1,3})\s*d[ií]as?\b""")
     private val pricePattern = Regex(
-        """(?:(?:\\$|CUP|MN)\s*([\d.,]+)|([\d.,]+)\s*(?:\\$|CUP|MN|pesos?)|(?:x|precio)\s*([\d.,]+))"""
+        """(?:(?:[$]|CUP|MN)\s*(\d[\d.,]*)|(\d[\d.,]*)\s*(?:[$]|CUP|MN|pesos?)|(?:x|precio)\s*(\d[\d.,]*))"""
     )
 
     private val successWords = listOf(
