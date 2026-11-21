@@ -10,11 +10,19 @@ package com.example.domain
 object PrepaidPurchase {
     private const val BASE_CODE = "*133*1*4"
 
-    /** Opens the package menu. */
-    const val MENU_CODE = "$BASE_CODE#"
+    /**
+     * The carrier's package menu, kept in the app so no USSD consultation is
+     * needed just to show the options. Only the final purchase code is dialed.
+     */
+    val MENU_TEXT = """
+        1 - 4.5GB x 240.00
+        2 - 2GB +15min +20SMS x 120.00
+        3 - 4GB +35min +40SMS x 240.00
+        4 - 6GB +60min +70SMS x 360.00
+    """.trimIndent()
 
-    /** Selects a package without accepting it yet (used by the assisted fallback). */
-    fun selectionCode(optionNumber: Int): String = "$BASE_CODE*$optionNumber#"
+    /** Parsed menu with the prepaid line's default validity of 35 days. */
+    val MENU_OPTIONS = UssdPurchaseParser.parseMenu(MENU_TEXT).map { it.copy(days = 35) }
 
     /** Selects a package and accepts the purchase with the final `1`. */
     fun confirmationCode(optionNumber: Int): String = "$BASE_CODE*$optionNumber*1#"

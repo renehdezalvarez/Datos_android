@@ -11,10 +11,34 @@ import org.junit.Test
 class UssdPurchaseParserTest {
 
     @Test
-    fun `builds composed USSD codes from the menu base`() {
-        assertEquals("*133*1*4#", PrepaidPurchase.MENU_CODE)
-        assertEquals("*133*1*4*2#", PrepaidPurchase.selectionCode(2))
+    fun `builds the final USSD code for the selected package`() {
         assertEquals("*133*1*4*2*1#", PrepaidPurchase.confirmationCode(2))
+    }
+
+    @Test
+    fun `in-app menu contains all four carrier packages`() {
+        val options = PrepaidPurchase.MENU_OPTIONS
+
+        assertEquals(listOf(1, 2, 3, 4), options.map { it.number })
+        assertEquals(4.5, options[0].sizeGB!!, 0.001)
+        assertEquals("240.00", options[0].price)
+        assertEquals(35, options[0].days)
+        assertEquals("1 - 4.5GB x 240.00", options[0].rawLine)
+
+        assertEquals(2.0, options[1].sizeGB!!, 0.001)
+        assertEquals("120.00", options[1].price)
+        assertEquals(35, options[1].days)
+        assertEquals("2 - 2GB +15min +20SMS x 120.00", options[1].rawLine)
+
+        assertEquals(4.0, options[2].sizeGB!!, 0.001)
+        assertEquals("240.00", options[2].price)
+        assertEquals(35, options[2].days)
+        assertEquals("3 - 4GB +35min +40SMS x 240.00", options[2].rawLine)
+
+        assertEquals(6.0, options[3].sizeGB!!, 0.001)
+        assertEquals("360.00", options[3].price)
+        assertEquals(35, options[3].days)
+        assertEquals("4 - 6GB +60min +70SMS x 360.00", options[3].rawLine)
     }
 
     @Test

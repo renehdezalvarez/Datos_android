@@ -7,7 +7,6 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.domain.UssdParser
-import com.example.domain.UssdPurchaseParser
 
 /**
  * Accessibility fallback that reads the carrier's USSD response dialog when
@@ -17,18 +16,15 @@ import com.example.domain.UssdPurchaseParser
  * accessibility window tree; the official TelephonyManager API is tried first
  * (see [UssdSystemApi]).
  *
- * It only inspects windows while a consultation or a package purchase is
- * pending (see [UssdCaptureHolder.consultationActive] and
- * [UssdCaptureHolder.purchaseActive]). Every response is dismissed after
- * capture so the next USSD code of the purchase flow can be dialed cleanly.
+ * It only inspects windows while a balance consultation is pending (see
+ * [UssdCaptureHolder.consultationActive]). Package purchases no longer need it:
+ * the menu lives in the app and the final USSD code is confirmed by SMS.
  */
 class UssdCatcherService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val evt = event ?: return
-        val readingActive = UssdCaptureHolder.consultationActive
-        val purchaseActive = UssdCaptureHolder.purchaseActive
-        if (!readingActive && !purchaseActive) return
+        if (!UssdCaptureHolder.consultationActive) return
         if (evt.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             evt.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         ) return
@@ -46,38 +42,19 @@ class UssdCatcherService : AccessibilityService() {
         }
         if (text.isBlank()) return
 
-        if (readingActive) {
-            // Only react when the dialog actually carries a balance / days
-            // (USSD dialogs first show placeholders like "Usted marcó *222#").
-            val hasBalance = UssdParser.parseDataBalanceMB(text) != null
-            val hasDays = UssdParser.parseDaysRemaining(text) != null
-            if (!hasBalance && !hasDays) return
+        // Only react when the dialog actually carries a balance / days
+        // (USSD dialogs first show placeholders like "Usted marcó *222#").
+        val hasBalance = UssdParser.parseDataBalanceMB(text) != null
+        val hasDays = UssdParser.parseDaysRemaining(text) != null
+        if (!hasBalance && !hasDays) return
 
-            if (UssdCaptureHolder.push(text)) {
-                dismissUssdDialog(root)
-            }
-            return
-        }
-
-        // Only a real menu / confirmation may be consumed. Without this filter
-        // the placeholder "Usted marcó *133..." (or even this app's own text)
-        // would be taken as the response and the flow would end prematurely.
-        if (purchaseActive && isPurchaseResponse(text)) {
-            if (UssdCaptureHolder.pushPurchase(text)) {
-                dismissUssdDialog(root)
-            }
+        if (UssdCaptureHolder.push(text)) {
+            dismissUssdDialog(root)
         }
     }
 
     override fun onInterrupt() {
         // Nothing to do.
-    }
-
-    /** True only for a parsable carrier menu, prompt, success or failure. */
-    private fun isPurchaseResponse(text: String): Boolean {
-        if (UssdPurchaseParser.parseMenu(text).isNotEmpty()) return true
-        val confirmation = UssdPurchaseParser.parseConfirmation(text)
-        return confirmation.needsConfirmation || confirmation.success || confirmation.failure
     }
 
     /** Walks the node tree and concatenates every text/contentDescription. */

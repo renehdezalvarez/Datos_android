@@ -31,17 +31,16 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   cuenta como compra nueva, así que no repite la consulta. Un recordatorio
   diario a las 09:00 avisa desde ese día hasta que registres un paquete nuevo.
   El aviso de "último día" del paquete sigue igual.
-- **Compra de paquetes por USSD (línea prepaga)**: **Nueva Compra** consulta
-  `*133*1*4#`, muestra en la app los paquetes detectados y, tras elegir uno y
-  confirmar, marca directamente el código completo con el `1` de aceptación
-  (por ejemplo `*133*1*4*2*1#`). No hace falta leer el aviso intermedio del
-  operador. Usa la misma SIM configurada para la línea 2, lee el SMS de
-  confirmación de ETECSA y registra el paquete solo cuando ese SMS confirma la
-  compra (también se puede pegar el SMS a mano). Si la API de telefonía no
-  responde, la app pasa al marcador y al lector de accesibilidad sin insistir en
-  la API en cada paso: marca el código, lee solo una respuesta real del menú y
-  cierra el diálogo USSD. Siempre queda la opción de registrar la compra
-  manualmente.
+- **Compra de paquetes por USSD (línea prepaga)**: **Nueva Compra** muestra
+  directamente en la app el menú completo de ETECSA (4.5GB/240 CUP, 2GB+15min+20SMS/120 CUP,
+  4GB+35min+40SMS/240 CUP y 6GB+60min+70SMS/360 CUP), sin consultar
+  `*133*1*4#`. Tras elegir uno y confirmar, marca solo el código final con el
+  `1` de aceptación (por ejemplo `*133*1*4*2*1#`). Usa la SIM configurada para
+  la línea 2, lee el SMS de confirmación de ETECSA y registra el paquete solo
+  cuando ese SMS confirma la compra (también se puede pegar el SMS a mano). Si
+  la API de telefonía no responde, la app pasa al marcador en esa misma SIM; el
+  lector de accesibilidad ya no es necesario para comprar. Siempre queda la
+  opción de registrar la compra manualmente.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El
   código USSD por operador y la SIM de cada línea se configuran una vez; la app

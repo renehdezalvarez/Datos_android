@@ -1,8 +1,6 @@
 package com.example.ui.components
 
 import android.Manifest
-import android.content.Intent
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -48,19 +45,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.domain.PrepaidPurchase
-import com.example.domain.UssdPurchaseParser
 import com.example.domain.UssdPurchaseParser.PackageOption
 import com.example.domain.UssdPurchaseParser.PurchaseConfirmation
 import com.example.ussd.PurchaseSmsHolder
-import com.example.ussd.UssdCaptureHolder
-import com.example.ussd.UssdCatcherService
 import com.example.ussd.UssdDialer
 import com.example.ussd.UssdSystemApi
 import kotlinx.coroutines.delay
 
 private sealed interface PurchaseStep {
-    data object Intro : PurchaseStep
-    data object LoadingMenu : PurchaseStep
     data class MenuReady(val raw: String, val options: List<PackageOption>) : PurchaseStep
     data class Confirming(val option: PackageOption) : PurchaseStep
     data object Purchasing : PurchaseStep
@@ -69,24 +61,19 @@ private sealed interface PurchaseStep {
     data class Failure(val message: String, val raw: String?) : PurchaseStep
 }
 
-private enum class PurchaseStage { MENU, SMS_WAIT }
-
 private data class ActivePurchaseRequest(
     val session: Long,
-    val stage: PurchaseStage,
     val startedAt: Long,
-    val option: PackageOption?
+    val option: PackageOption
 )
 
 /**
- * Buys a prepaid package for line 2 through the carrier's USSD menu.
+ * Buys a prepaid package for line 2.
  *
- * The menu response is parsed into in-app options. Once the user picks one
- * and confirms, the app dials the composed code with the final `1` directly
- * (no need to read the intermediate "press 1" prompt); the official telephony
- * API is tried first and the accessibility catcher is the fallback. The final
- * confirmation arrives by SMS, so the app listens for it (or lets the user
- * paste it). Nothing is registered until that SMS is read.
+ * The package menu is kept in the app ([PrepaidPurchase.MENU_OPTIONS]), so the
+ * only USSD request is the final purchase code (`*133*1*4*N*1#`). The official
+ * telephony API is tried first and the dialer is the fallback. The purchase is
+ * registered only when ETECSA's confirmation SMS is read (or pasted).
  */
 @Composable
 fun UssdPurchaseDialog(
@@ -101,17 +88,19 @@ fun UssdPurchaseDialog(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val systemApiAvailable = remember(context) { UssdSystemApi.isAvailable(context) }
-    val catcherEnabled = remember(context) { UssdCatcherService.isEnabled(context) }
 
-    var step by remember { mutableStateOf<PurchaseStep>(PurchaseStep.Intro) }
+    val rawMenuText = PrepaidPurchase.MENU_TEXT
+    val menuOptions = PrepaidPurchase.MENU_OPTIONS
+
+    var step by remember {
+        mutableStateOf<PurchaseStep>(PurchaseStep.MenuReady(rawMenuText, menuOptions))
+    }
     var sessionCounter by remember { mutableStateOf(0L) }
     var active by remember { mutableStateOf<ActivePurchaseRequest?>(null) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var apiUsable by remember { mutableStateOf(systemApiAvailable) }
     var assistedNoticeShown by remember { mutableStateOf(false) }
 
-    var rawMenuText by remember { mutableStateOf("") }
-    var menuOptions by remember { mutableStateOf<List<PackageOption>>(emptyList()) }
     var manualOptionText by remember { mutableStateOf("") }
     var sizeText by remember { mutableStateOf("") }
     var daysText by remember { mutableStateOf("35") }
@@ -141,17 +130,6 @@ fun UssdPurchaseDialog(
         }
     }
 
-    fun openAccessibilitySettings() {
-        try {
-            context.startActivity(
-                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        } catch (_: Exception) {
-            Toast.makeText(context, "No se pudo abrir la configuración", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     fun runWithPermissions(action: () -> Unit) {
         val missing = buildList {
             if (!UssdDialer.hasCallPermission(context)) add(Manifest.permission.CALL_PHONE)
@@ -176,16 +154,9 @@ fun UssdPurchaseDialog(
         else -> UssdDialer.subscriptionIdForSlot(context, selectedSimSlot)
     }
 
-    fun startAssisted(session: Long, stage: PurchaseStage, code: String, option: PackageOption?) {
-        // Once the API fails, stay on the assisted route for the rest of this
-        // purchase instead of retrying (and complaining) at every step.
+    fun startAssisted(session: Long, code: String, option: PackageOption) {
         apiUsable = false
-        // The catcher was already armed before the API attempt: keep it armed
-        // so a response shown by the carrier is not cleared here.
-        UssdCaptureHolder.armPurchase()
-        // Keep the original timestamp: captures/SMS from this same attempt
-        // must not be discarded just because the assisted dialer took over.
-        active = ActivePurchaseRequest(session, stage, active?.startedAt ?: System.currentTimeMillis(), option)
+        active = ActivePurchaseRequest(session, active?.startedAt ?: System.currentTimeMillis(), option)
         UssdDialer.dial(
             context,
             code,
@@ -195,26 +166,11 @@ fun UssdPurchaseDialog(
         if (!assistedNoticeShown) {
             Toast.makeText(
                 context,
-                when (stage) {
-                    PurchaseStage.MENU ->
-                        "Marcando el menú de paquetes con el operador. La app leerá la respuesta automáticamente."
-                    PurchaseStage.SMS_WAIT ->
-                        "Marcando la compra. Espera el SMS de confirmación de ETECSA."
-                },
+                "Marcando la compra. Espera el SMS de confirmación de ETECSA.",
                 Toast.LENGTH_LONG
             ).show()
             assistedNoticeShown = true
         }
-    }
-
-    fun handleMenuResponse(session: Long, text: String) {
-        if (active?.session != session) return
-        val options = UssdPurchaseParser.parseMenu(text)
-        UssdCaptureHolder.disarmPurchase()
-        active = null
-        rawMenuText = text
-        menuOptions = options
-        step = PurchaseStep.MenuReady(text, options)
     }
 
     fun showResult(result: PurchaseConfirmation, text: String) {
@@ -231,22 +187,23 @@ fun UssdPurchaseDialog(
             )
             return
         }
-        val confirmedOption = PackageOption(
-            number = manualOptionText.toIntOrNull() ?: 0,
-            sizeGB = gb,
-            days = days,
-            price = result.price,
-            rawLine = text.trim()
+        step = PurchaseStep.Success(
+            PackageOption(
+                number = manualOptionText.toIntOrNull() ?: 0,
+                sizeGB = gb,
+                days = days,
+                price = result.price,
+                rawLine = text.trim()
+            ),
+            text
         )
-        step = PurchaseStep.Success(confirmedOption, text)
     }
 
     /** Applies a carrier SMS (auto-captured or pasted by the user). */
     fun applySmsConfirmation(text: String) {
         if (text.isBlank()) return
-        val result = UssdPurchaseParser.parseSmsConfirmation(text)
+        val result = com.example.domain.UssdPurchaseParser.parseSmsConfirmation(text)
         PurchaseSmsHolder.disarm()
-        UssdCaptureHolder.disarmPurchase()
         active = null
         if (result.failure || !result.success) {
             step = PurchaseStep.Failure(
@@ -257,46 +214,6 @@ fun UssdPurchaseDialog(
             return
         }
         showResult(result.copy(success = true, failure = false), text)
-    }
-
-    fun requestMenu() {
-        runWithPermissions {
-            UssdCaptureHolder.clearPurchase()
-            UssdCaptureHolder.armPurchase()
-            sessionCounter += 1
-            val session = sessionCounter
-            apiUsable = systemApiAvailable
-            assistedNoticeShown = false
-            active = ActivePurchaseRequest(session, PurchaseStage.MENU, System.currentTimeMillis(), null)
-            step = PurchaseStep.LoadingMenu
-
-            val subscriptionId = resolveSubscriptionId()
-            val canUseApi = apiUsable && (selectedSimSlot == null || subscriptionId != null)
-            if (!canUseApi) {
-                startAssisted(session, PurchaseStage.MENU, PrepaidPurchase.MENU_CODE, null)
-                return@runWithPermissions
-            }
-            val started = UssdSystemApi.request(
-                context,
-                PrepaidPurchase.MENU_CODE,
-                subscriptionId
-            ) { result ->
-                if (active?.session != session) return@request
-                when (result) {
-                    is UssdSystemApi.Result.Success -> handleMenuResponse(session, result.response)
-                    is UssdSystemApi.Result.Failure,
-                    UssdSystemApi.Result.Timeout -> startAssisted(
-                        session,
-                        PurchaseStage.MENU,
-                        PrepaidPurchase.MENU_CODE,
-                        null
-                    )
-                }
-            }
-            if (!started) {
-                startAssisted(session, PurchaseStage.MENU, PrepaidPurchase.MENU_CODE, null)
-            }
-        }
     }
 
     fun selectOption(option: PackageOption) {
@@ -325,17 +242,14 @@ fun UssdPurchaseDialog(
         }
         // Disable the button while permissions are being requested.
         step = PurchaseStep.Purchasing
+        assistedNoticeShown = false
         runWithPermissions {
-            UssdCaptureHolder.clearPurchase()
-            UssdCaptureHolder.armPurchase()
             sessionCounter += 1
             val session = sessionCounter
-            // The carrier accepts the whole purchase in this one code. There
-            // is no need to dial the option first and read the "press 1" prompt.
             val code = PrepaidPurchase.confirmationCode(option.number)
             val startedAt = System.currentTimeMillis()
             PurchaseSmsHolder.arm(session, startedAt)
-            active = ActivePurchaseRequest(session, PurchaseStage.SMS_WAIT, startedAt, option)
+            active = ActivePurchaseRequest(session, startedAt, option)
             smsText = ""
             ussdAckText = ""
             step = PurchaseStep.WaitingSms(null)
@@ -343,25 +257,30 @@ fun UssdPurchaseDialog(
             val subscriptionId = resolveSubscriptionId()
             val canUseApi = apiUsable && (selectedSimSlot == null || subscriptionId != null)
             if (!canUseApi) {
-                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
+                startAssisted(session, code, option)
                 return@runWithPermissions
             }
             val started = UssdSystemApi.request(context, code, subscriptionId) { result ->
                 if (active?.session != session) return@request
                 when (result) {
                     is UssdSystemApi.Result.Success -> {
-                        // Only an acknowledgement: the real confirmation is the SMS.
                         ussdAckText = result.response.trim()
                         step = PurchaseStep.WaitingSms(ussdAckText)
                     }
                     is UssdSystemApi.Result.Failure,
-                    UssdSystemApi.Result.Timeout -> startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
+                    UssdSystemApi.Result.Timeout -> startAssisted(session, code, option)
                 }
             }
             if (!started) {
-                startAssisted(session, PurchaseStage.SMS_WAIT, code, option)
+                startAssisted(session, code, option)
             }
         }
+    }
+
+    fun backToMenu() {
+        PurchaseSmsHolder.disarm()
+        active = null
+        step = PurchaseStep.MenuReady(rawMenuText, menuOptions)
     }
 
     fun finishPurchase(success: PurchaseStep.Success) {
@@ -371,27 +290,11 @@ fun UssdPurchaseDialog(
         onDismiss()
     }
 
-    // Captures from the accessibility fallback are matched against the active
-    // session, so a late dialog from a previous attempt is ignored.
     LaunchedEffect(active?.session) {
         val request = active ?: return@LaunchedEffect
-        UssdCaptureHolder.lastPurchaseCapture.collect { capture ->
-            val current = active ?: return@collect
-            if (current.session != request.session) return@collect
-            if (capture == null || capture.timestampMs < current.startedAt) return@collect
-            when (current.stage) {
-                PurchaseStage.MENU -> handleMenuResponse(current.session, capture.text)
-                PurchaseStage.SMS_WAIT -> Unit
-            }
-        }
-    }
-
-    LaunchedEffect(active?.session) {
-        val request = active ?: return@LaunchedEffect
-        if (request.stage != PurchaseStage.SMS_WAIT) return@LaunchedEffect
         PurchaseSmsHolder.lastSms.collect { sms ->
             val current = active ?: return@collect
-            if (current.session != request.session || current.stage != PurchaseStage.SMS_WAIT) return@collect
+            if (current.session != request.session) return@collect
             if (sms == null || sms.timestampMs < current.startedAt) return@collect
             applySmsConfirmation(sms.text)
         }
@@ -401,7 +304,6 @@ fun UssdPurchaseDialog(
         val request = active ?: return@LaunchedEffect
         delay(180_000L)
         if (active?.session == request.session) {
-            UssdCaptureHolder.disarmPurchase()
             PurchaseSmsHolder.disarm()
             active = null
             step = PurchaseStep.Failure(
@@ -412,10 +314,7 @@ fun UssdPurchaseDialog(
     }
 
     DisposableEffect(Unit) {
-        onDispose {
-            UssdCaptureHolder.disarmPurchase()
-            PurchaseSmsHolder.disarm()
-        }
+        onDispose { PurchaseSmsHolder.disarm() }
     }
 
     AlertDialog(
@@ -435,12 +334,7 @@ fun UssdPurchaseDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 when (val current = step) {
-                    PurchaseStep.Intro -> {
-                        Text(
-                            text = "Se consultarán los paquetes disponibles con ${PrepaidPurchase.MENU_CODE}. " +
-                                "Podrás ver las opciones aquí antes de confirmar.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                    is PurchaseStep.MenuReady -> {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
@@ -456,27 +350,70 @@ fun UssdPurchaseDialog(
                                 )
                             }
                         }
-                        if (!catcherEnabled) {
-                            TextButton(onClick = { openAccessibilitySettings() }) {
-                                Text("Activar lector USSD como respaldo")
-                            }
+                        Text("Paquetes disponibles:", fontWeight = FontWeight.Bold)
+                        current.options.forEach { option ->
+                            FilterChip(
+                                selected = false,
+                                onClick = { selectOption(option) },
+                                label = { Text(option.rawLine) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
+                        OutlinedTextField(
+                            value = manualOptionText,
+                            onValueChange = { manualOptionText = it },
+                            label = { Text("Número de opción") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("ussd_purchase_option_input")
+                        )
                         TextButton(onClick = onOpenManual) {
                             Text("Registrar la compra manualmente")
                         }
                     }
 
-                    PurchaseStep.LoadingMenu, PurchaseStep.Purchasing -> {
+                    is PurchaseStep.Confirming -> {
+                        Text("Revisa la compra antes de continuar:", fontWeight = FontWeight.Bold)
+                        Text(current.option.rawLine)
+                        OutlinedTextField(
+                            value = sizeText,
+                            onValueChange = { sizeText = it },
+                            label = { Text("Tamaño del paquete (GB)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = daysText,
+                            onValueChange = { daysText = it },
+                            label = { Text("Días de vigencia") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        val gb = sizeText.toDoubleOrNull() ?: 0.0
+                        if (gb > 0.0) {
+                            Text(
+                                text = "Saldo resultante estimado: " +
+                                    DataFormatters.format(currentRemainingMB + gb * 1024.0, displayUnit) +
+                                    " (paquete total " +
+                                    DataFormatters.format(currentTotalMB + gb * 1024.0, displayUnit) + ")",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Text(
+                            text = "Se marcará ${PrepaidPurchase.confirmationCode(current.option.number)}. " +
+                                "Ese código ya incluye la aceptación de la compra; después llega el SMS.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(onClick = { step = PurchaseStep.MenuReady(rawMenuText, menuOptions) }) {
+                            Text("Volver a los paquetes")
+                        }
+                    }
+
+                    PurchaseStep.Purchasing -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = if (step is PurchaseStep.Purchasing) {
-                                    "Confirmando la compra…"
-                                } else {
-                                    "Consultando paquetes disponibles…"
-                                }
-                            )
+                            Text("Confirmando la compra…")
                         }
                     }
 
@@ -518,81 +455,6 @@ fun UssdPurchaseDialog(
                         }
                     }
 
-                    is PurchaseStep.MenuReady -> {
-                        Text("Paquetes detectados:", fontWeight = FontWeight.Bold)
-                        if (current.options.isNotEmpty()) {
-                            current.options.forEach { option ->
-                                FilterChip(
-                                    selected = false,
-                                    onClick = { selectOption(option) },
-                                    label = { Text(option.rawLine) },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = "No pude interpretar el menú. Puedes escribir el número de opción y el tamaño.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        OutlinedTextField(
-                            value = manualOptionText,
-                            onValueChange = { manualOptionText = it },
-                            label = { Text("Número de opción") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("ussd_purchase_option_input")
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = current.raw.replace('\n', ' ').take(300),
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    }
-
-                    is PurchaseStep.Confirming -> {
-                        Text("Revisa la compra antes de continuar:", fontWeight = FontWeight.Bold)
-                        Text(current.option.rawLine)
-                        OutlinedTextField(
-                            value = sizeText,
-                            onValueChange = { sizeText = it },
-                            label = { Text("Tamaño del paquete (GB)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = daysText,
-                            onValueChange = { daysText = it },
-                            label = { Text("Días de vigencia") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        val gb = sizeText.toDoubleOrNull() ?: 0.0
-                        if (gb > 0.0) {
-                            Text(
-                                text = "Saldo resultante estimado: " +
-                                    DataFormatters.format(currentRemainingMB + gb * 1024.0, displayUnit) +
-                                    " (paquete total " +
-                                    DataFormatters.format(currentTotalMB + gb * 1024.0, displayUnit) + ")",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Text(
-                            text = "Se marcará ${PrepaidPurchase.confirmationCode(current.option.number)}. " +
-                                "Ese código ya incluye la aceptación de la compra; después llega el SMS.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        TextButton(onClick = { step = PurchaseStep.MenuReady(rawMenuText, menuOptions) }) {
-                            Text("Volver a las opciones")
-                        }
-                    }
-
                     is PurchaseStep.Success -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -625,11 +487,6 @@ fun UssdPurchaseDialog(
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
-                        if (!catcherEnabled) {
-                            TextButton(onClick = { openAccessibilitySettings() }) {
-                                Text("Activar lector de accesibilidad")
-                            }
-                        }
                         TextButton(onClick = onOpenManual) {
                             Text("Registrar manualmente")
                         }
@@ -640,15 +497,6 @@ fun UssdPurchaseDialog(
         },
         confirmButton = {
             when (val current = step) {
-                PurchaseStep.Intro -> Button(
-                    onClick = { requestMenu() },
-                    modifier = Modifier.testTag("ussd_purchase_start")
-                ) {
-                    Icon(Icons.Default.Dialpad, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Ver paquetes")
-                }
-
                 is PurchaseStep.MenuReady -> Button(
                     onClick = { continueFromMenu() },
                     enabled = manualOptionText.toIntOrNull() != null
@@ -674,11 +522,11 @@ fun UssdPurchaseDialog(
                     Text("Listo")
                 }
 
-                is PurchaseStep.Failure -> Button(onClick = { requestMenu() }) {
-                    Text("Reintentar")
+                is PurchaseStep.Failure -> Button(onClick = { backToMenu() }) {
+                    Text("Volver a los paquetes")
                 }
 
-                PurchaseStep.LoadingMenu, PurchaseStep.Purchasing -> {
+                PurchaseStep.Purchasing -> {
                     Text("Espera…", style = MaterialTheme.typography.labelSmall)
                 }
             }
