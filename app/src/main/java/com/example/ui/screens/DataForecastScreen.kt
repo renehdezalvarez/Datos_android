@@ -201,8 +201,7 @@ fun DataForecastScreen(
                     forecast = forecast,
                     displayUnit = displayUnit,
                     onConsultBalance = onConsultBalance,
-                    consultingBalance = consultingBalance,
-                    onOpenConfigurePackage = onOpenConfigurePackage
+                    consultingBalance = consultingBalance
                 )
             }
 

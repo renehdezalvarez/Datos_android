@@ -423,7 +423,8 @@ class DataForecastViewModel(
         lineId: Int = 2,
         packageTotalMB: Double,
         totalDays: Int = 35,
-        purchaseDateMillis: Long? = null
+        purchaseDateMillis: Long? = null,
+        sourceNote: String = ""
     ) {
         viewModelScope.launch {
             // Sensible empty state for a prepaid line: nothing accumulated
@@ -486,7 +487,8 @@ class DataForecastViewModel(
                 cycleDay,
                 "Compra nuevo paquete: ${DataFormatters.format(safePackage, current.displayUnit)}" +
                     (if (previousExpired) " (el paquete anterior venció: el saldo restante se perdió)" else "") +
-                    (if (purchaseDateMillis != null) " (comprado el ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(purchaseDateMillis))})" else "")
+                    (if (purchaseDateMillis != null) " (comprado el ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(purchaseDateMillis))})" else "") +
+                    (if (sourceNote.isBlank()) "" else " ($sourceNote)")
             )
         }
     }

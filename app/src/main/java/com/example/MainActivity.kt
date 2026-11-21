@@ -63,6 +63,7 @@ import com.example.ui.components.AddBalanceLogDialog
 import com.example.ui.components.AdjustCycleDaysDialog
 import com.example.ui.components.ConfigurePackageDialog
 import com.example.ui.components.NewPrepaidPurchaseDialog
+import com.example.ui.components.UssdPurchaseDialog
 import com.example.ui.components.UssdReadingDialog
 import com.example.ui.components.rememberUssdConsultation
 import com.example.ui.screens.DataForecastScreen
@@ -210,6 +211,7 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
     var showAdjustDaysDialog by remember { mutableStateOf(false) }
     var showAddLogDialog by remember { mutableStateOf(false) }
     var showNewPurchaseDialog by remember { mutableStateOf(false) }
+    var showUssdPurchaseDialog by remember { mutableStateOf(false) }
     var showUssdReadingDialog by remember { mutableStateOf(false) }
     // Día local en que se hizo la última pasada automática (clave estable para
     // no repetirla en cada recomposición) y guardia contra corridas simultáneas.
@@ -548,7 +550,7 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                     },
                     onOpenNewPurchaseDialog = {
                         targetLineId = 2
-                        showNewPurchaseDialog = true
+                        showUssdPurchaseDialog = true
                     },
                     onToggleDisplayUnit = { viewModel.toggleDisplayUnit(2) },
                     onSimulateDailyMB = { viewModel.setSimulatedDailyMB(2, it) }
@@ -629,6 +631,31 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                 },
                 onResetCalendar = {
                     viewModel.resetToRealCalendar(targetLineId)
+                }
+            )
+        }
+
+        if (showUssdPurchaseDialog) {
+            UssdPurchaseDialog(
+                displayUnit = state.line2.displayUnit,
+                selectedSimSlot = state.line2.plan.simSlotIndex,
+                currentTotalMB = state.line2.plan.packageTotalMB,
+                currentRemainingMB = state.line2.plan.remainingBalanceMB,
+                onDismiss = { showUssdPurchaseDialog = false },
+                onOpenManual = {
+                    showUssdPurchaseDialog = false
+                    targetLineId = 2
+                    showNewPurchaseDialog = true
+                },
+                onPurchaseConfirmed = { packageMB, totalDays, rawText ->
+                    viewModel.registerNewPrepaidPurchase(
+                        lineId = 2,
+                        packageTotalMB = packageMB,
+                        totalDays = totalDays,
+                        sourceNote = "Compra por USSD: ${rawText.replace('\n', ' ').take(120)}"
+                    )
+                    RechargeReminderWorker.cancel(context)
+                    showUssdPurchaseDialog = false
                 }
             )
         }

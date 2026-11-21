@@ -391,8 +391,7 @@ fun Prepaid35LineScreen(
                     forecast = forecast,
                     displayUnit = unit,
                     onConsultBalance = onConsultBalance,
-                    consultingBalance = consultingBalance,
-                    onOpenConfigurePackage = onOpenConfigurePackage
+                    consultingBalance = consultingBalance
                 )
             }
 

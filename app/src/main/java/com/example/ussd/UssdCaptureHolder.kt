@@ -8,10 +8,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * Bridge between the [UssdCatcherService] (accessibility service) and the
  * rest of the app.
  *
- * Privacy by design: the catcher only inspects window contents while
- * [consultationActive] is true, i.e. during the short window after the user
- * pressed "Marcar" and before the response is consumed or the consultation
- * times out.
+ * Privacy by design: the catcher only inspects window contents while a
+ * consultation or a package purchase is active, i.e. during the short window
+ * after the user pressed "Marcar" and before the response is consumed or the
+ * request times out.
  */
 object UssdCaptureHolder {
 
@@ -21,12 +21,20 @@ object UssdCaptureHolder {
     )
 
     private val _lastCapture = MutableStateFlow<Capture?>(null)
+    private val _lastPurchaseCapture = MutableStateFlow<Capture?>(null)
 
     /** Latest captured USSD response, if any. */
     val lastCapture: StateFlow<Capture?> = _lastCapture.asStateFlow()
 
+    /** Latest captured purchase menu/confirmation, if any. */
+    val lastPurchaseCapture: StateFlow<Capture?> = _lastPurchaseCapture.asStateFlow()
+
     @Volatile
     var consultationActive: Boolean = false
+        private set
+
+    @Volatile
+    var purchaseActive: Boolean = false
         private set
 
     /** Arms the catcher: called right before the USSD code is dialed. */
@@ -37,6 +45,16 @@ object UssdCaptureHolder {
     /** Disarms the catcher: called when the response is applied or on timeout. */
     fun disarm() {
         consultationActive = false
+    }
+
+    /** Arms the catcher for a package-purchase menu/confirmation. */
+    fun armPurchase() {
+        purchaseActive = true
+    }
+
+    /** Disarms the purchase capture once the response has been consumed. */
+    fun disarmPurchase() {
+        purchaseActive = false
     }
 
     private var lastPushedText: String? = null
@@ -56,8 +74,26 @@ object UssdCaptureHolder {
         return true
     }
 
+    private var lastPurchaseText: String? = null
+    private var lastPurchaseAtMs = 0L
+
+    /** Stores a captured purchase menu or confirmation. */
+    fun pushPurchase(text: String): Boolean {
+        val now = System.currentTimeMillis()
+        if (text == lastPurchaseText && now - lastPurchaseAtMs < 5_000L) return false
+        lastPurchaseText = text
+        lastPurchaseAtMs = now
+        _lastPurchaseCapture.value = Capture(text.trim(), now)
+        return true
+    }
+
     fun clear() {
         _lastCapture.value = null
         lastPushedText = null
+    }
+
+    fun clearPurchase() {
+        _lastPurchaseCapture.value = null
+        lastPurchaseText = null
     }
 }

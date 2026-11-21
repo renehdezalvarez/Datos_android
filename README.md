@@ -31,6 +31,15 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   cuenta como compra nueva, así que no repite la consulta. Un recordatorio
   diario a las 09:00 avisa desde ese día hasta que registres un paquete nuevo.
   El aviso de "último día" del paquete sigue igual.
+- **Compra de paquetes por USSD (línea prepaga)**: **Nueva Compra** consulta
+  `*133*1*4#`, muestra en la app los paquetes detectados y, tras elegir uno y
+  confirmar, marca primero la opción y luego el código completo con el `1` de
+  aceptación cuando el operador lo pide. Usa la misma SIM
+  configurada para la línea 2, lee el SMS de confirmación de ETECSA y registra
+  el paquete solo cuando ese SMS confirma la compra (también se puede pegar el
+  SMS a mano). Si la API de telefonía no responde, el lector de accesibilidad
+  sirve de respaldo y siempre queda la opción de registrar la compra
+  manualmente.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El
   código USSD por operador y la SIM de cada línea se configuran una vez; la app
@@ -89,7 +98,9 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
    código USSD; sin `READ_PHONE_STATE` no se pueden listar las SIM y se usa la
    predeterminada del sistema, que en un teléfono de doble SIM suele ser la
    línea equivocada. Concede también **Notificaciones** en Android 13+ para los
-   avisos de saldo, vencimiento y recarga.
+   avisos de saldo, vencimiento y recarga. Para comprar paquetes por USSD hace
+   falta además el permiso **SMS**: la app solo lo usa mientras espera la
+   confirmación de esa compra y puedes pegar el texto a mano si lo deniegas.
 2. **Código USSD de cada línea**: en **Ajustes → Lectura USSD** comprueba el
    código Guardado (por defecto, Línea 1 `*111#` y Línea 2 `*222*328#`). Si tu
    operador usa otro, cámbialo y guárdalo. La consulta de fecha de recarga de la

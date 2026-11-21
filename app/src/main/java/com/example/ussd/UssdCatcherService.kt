@@ -16,16 +16,18 @@ import com.example.domain.UssdParser
  * accessibility window tree; the official TelephonyManager API is tried first
  * (see [UssdSystemApi]).
  *
- * It only inspects windows while a consultation is pending
- * (see [UssdCaptureHolder.consultationActive]) and only keeps text that
- * actually parses as a data balance or remaining days. Once captured, it
- * dismisses the USSD dialog so the user lands back in the app.
+ * It only inspects windows while a consultation or a package purchase is
+ * pending (see [UssdCaptureHolder.consultationActive] and
+ * [UssdCaptureHolder.purchaseActive]). Balance readings are dismissed after
+ * capture; purchase menus are left open so the user can still act on them.
  */
 class UssdCatcherService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val evt = event ?: return
-        if (!UssdCaptureHolder.consultationActive) return
+        val readingActive = UssdCaptureHolder.consultationActive
+        val purchaseActive = UssdCaptureHolder.purchaseActive
+        if (!readingActive && !purchaseActive) return
         if (evt.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             evt.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         ) return
@@ -43,14 +45,23 @@ class UssdCatcherService : AccessibilityService() {
         }
         if (text.isBlank()) return
 
-        // Only react when the dialog actually carries a balance / days
-        // (USSD dialogs first show placeholders like "Usted marcó *222#").
-        val hasBalance = UssdParser.parseDataBalanceMB(text) != null
-        val hasDays = UssdParser.parseDaysRemaining(text) != null
-        if (!hasBalance && !hasDays) return
+        if (readingActive) {
+            // Only react when the dialog actually carries a balance / days
+            // (USSD dialogs first show placeholders like "Usted marcó *222#").
+            val hasBalance = UssdParser.parseDataBalanceMB(text) != null
+            val hasDays = UssdParser.parseDaysRemaining(text) != null
+            if (!hasBalance && !hasDays) return
 
-        if (UssdCaptureHolder.push(text)) {
-            dismissUssdDialog(root)
+            if (UssdCaptureHolder.push(text)) {
+                dismissUssdDialog(root)
+            }
+            return
+        }
+
+        // Purchase menus must stay open: the user still needs to pick an
+        // option, and the dialog may ask for the final confirmation digit.
+        if (purchaseActive && text.length >= 10 && text.any { it.isDigit() }) {
+            UssdCaptureHolder.pushPurchase(text)
         }
     }
 

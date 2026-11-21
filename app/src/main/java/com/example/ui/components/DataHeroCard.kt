@@ -59,7 +59,6 @@ fun DataHeroCard(
     displayUnit: String,
     onConsultBalance: () -> Unit,
     consultingBalance: Boolean = false,
-    onOpenConfigurePackage: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val willLast = forecast.willLastWholeMonth
@@ -241,17 +240,6 @@ fun DataHeroCard(
                                 text = if (consultingBalance) "Consultando…" else "Consultar Saldo",
                                 style = MaterialTheme.typography.labelMedium
                             )
-                        }
-
-                        if (onOpenConfigurePackage != null) {
-                            androidx.compose.material3.OutlinedButton(
-                                onClick = onOpenConfigurePackage,
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.testTag("hero_edit_package_button")
-                            ) {
-                                Text("Paquete", style = MaterialTheme.typography.labelMedium)
-                            }
                         }
                     }
                 }

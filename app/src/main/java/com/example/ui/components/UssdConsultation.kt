@@ -1,11 +1,6 @@
 package com.example.ui.components
 
 import android.Manifest
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Bundle
-import android.telecom.TelecomManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,9 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import com.example.domain.UssdParser
-import com.example.ussd.SimInfoProvider
+import com.example.ussd.UssdDialer
 import com.example.ussd.UssdSystemApi
 
 /** Handle returned by [rememberUssdConsultation]; call [start] to run the flow. */
@@ -62,70 +56,13 @@ fun rememberUssdConsultation(
 
     var pendingSystemApiAttempt by remember { mutableStateOf(false) }
 
-    fun hasCallPermission(): Boolean =
-        ContextCompat.checkSelfPermission(
-            context, Manifest.permission.CALL_PHONE
-        ) == PackageManager.PERMISSION_GRANTED
+    fun hasCallPermission(): Boolean = UssdDialer.hasCallPermission(context)
 
-    fun hasReadPhonePermission(): Boolean =
-        ContextCompat.checkSelfPermission(
-            context, Manifest.permission.READ_PHONE_STATE
-        ) == PackageManager.PERMISSION_GRANTED
+    fun hasReadPhonePermission(): Boolean = UssdDialer.hasReadPhonePermission(context)
 
-    fun openDialIntent(code: String, directCall: Boolean) {
-        try {
-            val encoded = Uri.encode(code)
-            val action = if (directCall) Intent.ACTION_CALL else Intent.ACTION_DIAL
-            val intent = Intent(action, Uri.parse("tel:$encoded")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        } catch (_: Exception) {
-            Toast.makeText(context, "No se pudo marcar $code", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * When the user assigned a SIM to this line, place the direct call through
-     * that subscription. Otherwise fall back to the normal ACTION_CALL/DIAL.
-     */
+    /** Uses the SIM assigned to this line, or the system default when unset. */
     fun dialUssd(code: String, directCall: Boolean) {
-        val selectedSlot = currentSlot.value
-        if (!directCall || selectedSlot == null) {
-            openDialIntent(code, directCall)
-            return
-        }
-
-        if (!SimInfoProvider.hasPermission(context)) {
-            Toast.makeText(
-                context,
-                "Concede el permiso de teléfono para marcar en la SIM elegida; se abrirá el marcador.",
-                Toast.LENGTH_LONG
-            ).show()
-            openDialIntent(code, directCall = false)
-            return
-        }
-
-        val handle = SimInfoProvider.phoneAccountHandleForSlot(context, selectedSlot)
-        val telecomManager = context.getSystemService(TelecomManager::class.java)
-        if (handle != null && telecomManager != null) {
-            try {
-                val extras = Bundle().apply {
-                    putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
-                }
-                telecomManager.placeCall(Uri.parse("tel:${Uri.encode(code)}"), extras)
-                return
-            } catch (_: Exception) {
-                // Fall through to the dialer below.
-            }
-        }
-
-        Toast.makeText(
-            context,
-            "No se pudo marcar directamente en la SIM elegida; selecciónala en el marcador.",
-            Toast.LENGTH_LONG
-        ).show()
-        openDialIntent(code, directCall = false)
+        UssdDialer.dial(context, code, directCall, currentSlot.value)
     }
 
     /** The API could not answer: arm the catcher and open the dialer. */
@@ -150,7 +87,7 @@ fun rememberUssdConsultation(
                 ).show()
                 return
             }
-            SimInfoProvider.subscriptionIdForSlot(context, selectedSlot)
+            UssdDialer.subscriptionIdForSlot(context, selectedSlot)
         } else {
             null
         }
