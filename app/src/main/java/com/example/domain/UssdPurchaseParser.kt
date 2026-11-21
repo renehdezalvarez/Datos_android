@@ -129,7 +129,7 @@ object UssdPurchaseParser {
 
     private fun parsePrice(text: String): String? {
         val match = pricePattern.find(text) ?: return null
-        val value = match.groupValues.firstOrNull { it.isNotBlank() } ?: return null
+        val value = match.groupValues.drop(1).firstOrNull { it.isNotBlank() } ?: return null
         return value.replace(',', '.')
     }
 
