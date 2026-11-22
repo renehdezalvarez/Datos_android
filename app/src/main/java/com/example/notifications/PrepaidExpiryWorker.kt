@@ -38,8 +38,10 @@ class PrepaidExpiryWorker(
         val plan = dao.getDataPlan(PREPAID_LINE_ID).first() ?: return Result.success()
 
         val daysFromPurchase = ((System.currentTimeMillis() - plan.purchaseTimestamp) / DAY_MS).toInt() + 1
+        // The prepaid line has no contracted package size; only the countdown
+        // matters here, so the current balance is used as a neutral reference.
         val forecast = DataForecastCalculator.calculate(
-            packageTotalMB = plan.packageTotalMB,
+            packageTotalMB = plan.remainingBalanceMB,
             remainingBalanceMB = plan.remainingBalanceMB,
             totalCycleDays = plan.totalCycleDays,
             daysElapsed = daysFromPurchase

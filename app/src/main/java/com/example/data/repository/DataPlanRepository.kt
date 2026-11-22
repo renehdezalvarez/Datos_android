@@ -60,10 +60,12 @@ class DataPlanRepository(private val dao: DataDao) {
         }
 
         if (dao.getDataPlan(2).firstOrNull() == null) {
-            // Line 2: prepaid 35-day line, starts with the full package available.
+            // Line 2: prepaid 35-day line. packageTotalMB is only kept because
+            // the table is shared with the monthly line; this line has no
+            // contracted size and derives consumption from its readings.
             val line2 = DataPlanEntity(
                 id = 2,
-                packageTotalMB = 6144.0, // 6 GB
+                packageTotalMB = 6144.0, // unused on the prepaid line
                 remainingBalanceMB = 6144.0,
                 totalCycleDays = 35, // 35 days package!
                 cycleStartDay = 1,

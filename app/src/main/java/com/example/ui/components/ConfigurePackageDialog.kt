@@ -79,6 +79,7 @@ fun ConfigurePackageDialog(
     currentTotalDays: Int,
     displayUnit: String,
     monthlyCalendarCycle: Boolean = false,
+    showPackageSize: Boolean = true,
     onDismiss: () -> Unit,
     onConfirm: (packageMB: Double, remainingMB: Double, totalDays: Int) -> Unit
 ) {
@@ -110,11 +111,20 @@ fun ConfigurePackageDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Configurar Paquete Contratado", fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                if (showPackageSize) "Configurar Paquete Contratado" else "Ajustar Saldo Prepago",
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column {
                 Text(
-                    text = "Ajusta la capacidad de tu paquete de datos, tu saldo restante y la duración del ciclo:",
+                    text = if (showPackageSize) {
+                        "Ajusta la capacidad de tu paquete de datos, tu saldo restante y la duración del ciclo:"
+                    } else {
+                        "Ajusta tu saldo disponible y la duración del ciclo. El consumo se calcula a partir de tus lecturas."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -158,50 +168,52 @@ fun ConfigurePackageDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(
-                    value = sizeText,
-                    onValueChange = { sizeText = it },
-                    label = { Text("Tamaño total del paquete ($inputUnit)") },
-                    placeholder = { Text(if (inputUnit == "GB") "Ej. 10" else "Ej. 10240") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("package_size_input")
-                )
+                if (showPackageSize) {
+                    OutlinedTextField(
+                        value = sizeText,
+                        onValueChange = { sizeText = it },
+                        label = { Text("Tamaño total del paquete ($inputUnit)") },
+                        placeholder = { Text(if (inputUnit == "GB") "Ej. 10" else "Ej. 10240") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("package_size_input")
+                    )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Text(
-                    text = "Paquetes frecuentes:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Paquetes frecuentes:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    packagePresetsGB.forEach { gbVal ->
-                        val presetStr = if (inputUnit == "GB") {
-                            gbVal.toInt().toString()
-                        } else {
-                            (gbVal * 1024.0).toInt().toString()
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        packagePresetsGB.forEach { gbVal ->
+                            val presetStr = if (inputUnit == "GB") {
+                                gbVal.toInt().toString()
+                            } else {
+                                (gbVal * 1024.0).toInt().toString()
+                            }
+                            val isSelected = sizeText == presetStr
+
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    sizeText = presetStr
+                                    // Suggest remaining balance as full if empty or 0
+                                    if (remainingText.isBlank() || (remainingText.toDoubleOrNull() ?: 0.0) == 0.0) {
+                                        remainingText = presetStr
+                                    }
+                                },
+                                label = { Text("${gbVal.toInt()} GB", style = MaterialTheme.typography.labelSmall) }
+                            )
                         }
-                        val isSelected = sizeText == presetStr
-
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = {
-                                sizeText = presetStr
-                                // Suggest remaining balance as full if empty or 0
-                                if (remainingText.isBlank() || (remainingText.toDoubleOrNull() ?: 0.0) == 0.0) {
-                                    remainingText = presetStr
-                                }
-                            },
-                            label = { Text("${gbVal.toInt()} GB", style = MaterialTheme.typography.labelSmall) }
-                        )
                     }
                 }
 
@@ -241,18 +253,25 @@ fun ConfigurePackageDialog(
             Button(
                 onClick = {
                     val rawSize = sizeText.toDoubleOrNull() ?: 10.0
-                    val rawRemaining = remainingText.toDoubleOrNull() ?: rawSize
+                    val rawRemaining = remainingText.toDoubleOrNull()
+                        ?: if (inputUnit == "GB") currentRemainingMB / 1024.0 else currentRemainingMB
                     val packageMB = if (inputUnit == "GB") rawSize * 1024.0 else rawSize
                     val remMB = if (inputUnit == "GB") rawRemaining * 1024.0 else rawRemaining
                     val days = daysText.toIntOrNull() ?: 30
 
-                    onConfirm(packageMB.coerceAtLeast(100.0), remMB.coerceIn(0.0, packageMB), days)
+                    val safeRemaining = if (showPackageSize) remMB.coerceIn(0.0, packageMB)
+                                        else remMB.coerceAtLeast(0.0)
+                    onConfirm(packageMB.coerceAtLeast(100.0), safeRemaining, days)
                     onDismiss()
                 },
-                enabled = (sizeText.toDoubleOrNull() ?: 0.0) > 0.0,
+                enabled = if (showPackageSize) {
+                    (sizeText.toDoubleOrNull() ?: 0.0) > 0.0
+                } else {
+                    (remainingText.toDoubleOrNull() ?: -1.0) >= 0.0
+                },
                 modifier = Modifier.testTag("save_package_button")
             ) {
-                Text("Guardar Paquete")
+                Text(if (showPackageSize) "Guardar Paquete" else "Guardar Saldo")
             }
         },
         dismissButton = {

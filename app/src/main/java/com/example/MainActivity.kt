@@ -611,6 +611,7 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                 currentTotalDays = currentDialogLine.plan.totalCycleDays,
                 displayUnit = currentDialogLine.displayUnit,
                 monthlyCalendarCycle = targetLineId == 1,
+                showPackageSize = targetLineId != 2,
                 onDismiss = { showConfigurePackageDialog = false },
                 onConfirm = { packageMB, remainingMB, totalDays ->
                     viewModel.updatePackageConfiguration(targetLineId, packageMB, remainingMB, totalDays)
@@ -637,20 +638,16 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
 
         if (showUssdPurchaseDialog) {
             UssdPurchaseDialog(
-                displayUnit = state.line2.displayUnit,
                 selectedSimSlot = state.line2.plan.simSlotIndex,
-                currentTotalMB = state.line2.plan.packageTotalMB,
-                currentRemainingMB = state.line2.plan.remainingBalanceMB,
                 onDismiss = { showUssdPurchaseDialog = false },
                 onOpenManual = {
                     showUssdPurchaseDialog = false
                     targetLineId = 2
                     showNewPurchaseDialog = true
                 },
-                onPurchaseConfirmed = { packageMB, totalDays, rawText ->
+                onPurchaseConfirmed = { totalDays, rawText ->
                     viewModel.registerNewPrepaidPurchase(
                         lineId = 2,
-                        packageTotalMB = packageMB,
                         totalDays = totalDays,
                         sourceNote = "Compra por USSD: ${rawText.replace('\n', ' ').take(120)}"
                     )
@@ -662,13 +659,12 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
 
         if (showNewPurchaseDialog) {
             NewPrepaidPurchaseDialog(
-                currentPackageTotalMB = state.line2.plan.packageTotalMB,
                 currentRemainingMB = state.line2.plan.remainingBalanceMB,
                 displayUnit = state.line2.displayUnit,
                 previousBalanceLost = state.line2.forecast.daysRemaining <= 0,
                 onDismiss = { showNewPurchaseDialog = false },
-                onConfirm = { packageMB, totalDays, purchaseDateMillis ->
-                    viewModel.registerNewPrepaidPurchase(2, packageMB, totalDays, purchaseDateMillis)
+                onConfirm = { totalDays, purchaseDateMillis ->
+                    viewModel.registerNewPrepaidPurchase(2, totalDays, purchaseDateMillis)
                     RechargeReminderWorker.cancel(context)
                     showNewPurchaseDialog = false
                 }
@@ -693,7 +689,7 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                 lineId = targetLineId,
                 lineName = if (targetLineId == 1) "Línea 1 (Mensual)" else "Línea 2 (Prepago 35d)",
                 currentUssdCode = currentDialogLine.plan.ussdCode,
-                packageTotalMB = currentDialogLine.plan.packageTotalMB,
+                packageTotalMB = if (targetLineId == 1) currentDialogLine.plan.packageTotalMB else null,
                 totalCycleDays = currentDialogLine.plan.totalCycleDays,
                 displayUnit = currentDialogLine.displayUnit,
                 selectedSimSlot = currentDialogLine.plan.simSlotIndex,

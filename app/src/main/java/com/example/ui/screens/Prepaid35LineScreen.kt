@@ -99,7 +99,7 @@ fun Prepaid35LineScreen(
                             )
                         }
                         Text(
-                            text = "Paquete de ${DataFormatters.format(plan.packageTotalMB, unit)} • Vence a los 35 días (${lineState.expirationDateFormatted})",
+                            text = "Vence a los ${plan.totalCycleDays} días (${lineState.expirationDateFormatted})",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -390,6 +390,7 @@ fun Prepaid35LineScreen(
                 DataHeroCard(
                     forecast = forecast,
                     displayUnit = unit,
+                    showPackageTotal = false,
                     onConsultBalance = onConsultBalance,
                     consultingBalance = consultingBalance
                 )
@@ -445,16 +446,8 @@ fun Prepaid35LineScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         BreakdownItem(
-                            label = "Paquete contratado",
-                            sublabel = "Válido por ${forecast.totalCycleDays} días desde la compra",
-                            value = DataFormatters.format(forecast.packageTotalMB, unit)
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        BreakdownItem(
                             label = "Consumo realizado hasta hoy",
-                            sublabel = "Gastado en los primeros ${forecast.daysElapsed} días",
+                            sublabel = "Calculado a partir de tus lecturas (día ${forecast.daysElapsed})",
                             value = DataFormatters.format(forecast.consumedMB, unit)
                         )
 

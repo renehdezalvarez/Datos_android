@@ -72,7 +72,8 @@ fun UssdReadingDialog(
     lineId: Int,
     lineName: String,
     currentUssdCode: String,
-    packageTotalMB: Double,
+    // Only the monthly line has a contracted size to bound manual readings.
+    packageTotalMB: Double?,
     totalCycleDays: Int,
     displayUnit: String,
     selectedSimSlot: Int?,
@@ -484,7 +485,11 @@ fun UssdReadingDialog(
                 Button(
                     onClick = {
                         parsedBalance?.let {
-                            val safeMB = it.valueMB.coerceIn(0.0, packageTotalMB)
+                            val safeMB = if (packageTotalMB != null) {
+                                it.valueMB.coerceIn(0.0, packageTotalMB)
+                            } else {
+                                it.valueMB.coerceAtLeast(0.0)
+                            }
                             onConfirmReading(safeMB, noteText.ifBlank { "Lectura USSD ($ussdCodeText)" })
                             onDismiss()
                         }

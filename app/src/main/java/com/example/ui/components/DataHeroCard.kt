@@ -57,6 +57,7 @@ import com.example.ui.theme.StatusWarningContainer
 fun DataHeroCard(
     forecast: DataForecastResult,
     displayUnit: String,
+    showPackageTotal: Boolean = true,
     onConsultBalance: () -> Unit,
     consultingBalance: Boolean = false,
     modifier: Modifier = Modifier
@@ -205,11 +206,13 @@ fun DataHeroCard(
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
-                        Text(
-                            text = "de ${DataFormatters.format(forecast.packageTotalMB, displayUnit)} contratados",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (showPackageTotal) {
+                            Text(
+                                text = "de ${DataFormatters.format(forecast.packageTotalMB, displayUnit)} contratados",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     Column(

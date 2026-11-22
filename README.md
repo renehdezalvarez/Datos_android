@@ -17,8 +17,9 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
 
 ## ✨ Características
 
-- **Dos líneas independientes**: una línea mensual (ciclo de calendario) y una
-  línea prepago de 35 días (conteo desde la compra).
+- **Dos líneas independientes**: una línea mensual (ciclo de calendario, con su
+  paquete contratado) y una línea prepago de 35 días (conteo desde la compra,
+  sin tamaño de paquete: solo saldo y lecturas).
 - **Pronóstico de agotamiento**: calcula el ritmo de consumo diario, la cuota
   diaria segura y el día del ciclo en que se agotará el saldo.
 - **Semáforo de riesgo**: `Sobrante`, `En ritmo`, `Riesgo de agotarse`,
@@ -36,11 +37,13 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   4GB+35min+40SMS/240 CUP y 6GB+60min+70SMS/360 CUP), sin consultar
   `*133*1*4#`. Tras elegir uno y confirmar, marca solo el código final con el
   `1` de aceptación (por ejemplo `*133*1*4*2*1#`). Usa la SIM configurada para
-  la línea 2, lee el SMS de confirmación de ETECSA y registra el paquete solo
-  cuando ese SMS confirma la compra (también se puede pegar el SMS a mano). Si
-  la API de telefonía no responde, la app pasa al marcador en esa misma SIM; el
-  lector de accesibilidad ya no es necesario para comprar. Siempre queda la
-  opción de registrar la compra manualmente.
+  la línea 2, lee el SMS de confirmación de ETECSA y registra la compra solo
+  cuando ese SMS la confirma (también se puede pegar el SMS a mano). Si la API
+  de telefonía no responde, la app pasa al marcador en esa misma SIM; el lector
+  de accesibilidad ya no es necesario para comprar. Siempre queda la opción de
+  registrar la compra manualmente. La app **no pide ni guarda el tamaño del
+  paquete**: solo anota la fecha de compra (reinicia el ciclo de 35 días) y el
+  saldo real se registra después con **Consultar Saldo** o una lectura manual.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El
   código USSD por operador y la SIM de cada línea se configuran una vez; la app
@@ -70,7 +73,10 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   siguiente día a las 22:00; abrir la app no lo retrasa.
 - **Historial de lecturas y consumo diario** por línea: lecturas con notas
   (editables/eliminables) y una vista de **consumo diario** calculada a partir
-  de las diferencias entre lecturas registradas cada día.
+  de las diferencias entre lecturas registradas cada día. En la línea prepaga
+  ese historial también alimenta el pronóstico: la referencia es el mayor saldo
+  registrado desde la compra, así que no hace falta configurar un tamaño de
+  paquete (la línea solo se recarga y el saldo lo informa el operador).
 - **Gráfico de barras de consumo por día del ciclo** en la pantalla principal de
   cada línea: muestra en MB cuánto se consumió en cada día del ciclo; la última
   lectura de un día sirve como saldo inicial del día siguiente.

@@ -244,13 +244,18 @@ fun DataSettingsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = DataFormatters.format(state.line2.plan.packageTotalMB, state.line2.displayUnit),
+                            text = "Saldo disponible",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = DataFormatters.format(state.line2.plan.remainingBalanceMB, state.line2.displayUnit),
                             style = MaterialTheme.typography.displayMedium,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.secondary
                         )
                         Text(
-                            text = "Vence a los ${state.line2.plan.totalCycleDays} días (${state.line2.expirationDateFormatted}) • Saldo: ${DataFormatters.format(state.line2.plan.remainingBalanceMB, state.line2.displayUnit)}",
+                            text = "Vence a los ${state.line2.plan.totalCycleDays} días (${state.line2.expirationDateFormatted})",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

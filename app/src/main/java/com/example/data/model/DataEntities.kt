@@ -7,6 +7,8 @@ import androidx.room.PrimaryKey
 data class DataPlanEntity(
     @PrimaryKey
     val id: Int = 1,
+    // Monthly line only: the prepaid line has no contracted package size.
+    // The column stays in the shared table, but line 2 never reads it.
     val packageTotalMB: Double = 10240.0, // 10 GB
     val remainingBalanceMB: Double = 10240.0, // starts with the full package
     val totalCycleDays: Int = 30,

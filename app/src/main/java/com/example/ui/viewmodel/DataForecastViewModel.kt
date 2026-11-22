@@ -111,6 +111,26 @@ class DataForecastViewModel(
     private fun displayedCycleDay(lineId: Int, plan: DataPlanEntity): Int =
         if (lineId == 1) line1CycleDay(plan) else cycleDayOf(plan, plan.totalCycleDays)
 
+    /**
+     * The prepaid line has no contracted package size. Its reference balance
+     * is the highest balance recorded since the current purchase (or the
+     * current balance when there are no readings yet), so consumption is
+     * derived from the reading history instead of a configured total.
+     */
+    private fun prepaidCycleBaselineMB(
+        plan: DataPlanEntity,
+        logs: List<DataBalanceLogEntity>
+    ): Double {
+        val recorded = logs.filter { it.planId == 2 && it.timestamp >= plan.purchaseTimestamp }
+            .maxOfOrNull { it.remainingMB } ?: 0.0
+        return maxOf(100.0, plan.remainingBalanceMB, recorded)
+    }
+
+    /** A contracted package only bounds readings on the monthly line. */
+    private fun clampReading(lineId: Int, mb: Double, plan: DataPlanEntity): Double =
+        if (lineId == 2) mb.coerceAtLeast(0.0)
+        else mb.coerceIn(0.0, plan.packageTotalMB)
+
     /** Whether the silent *222*732# query is still pending for this prepaid cycle. */
     fun needsRechargeQuery(plan: DataPlanEntity): Boolean = PrepaidRecharge.needsQuery(
         planType = plan.planType,
@@ -237,7 +257,7 @@ class DataForecastViewModel(
         var newCycleDay: Int? = null
 
         if (mb != null) {
-            updated = updated.copy(remainingBalanceMB = mb.coerceIn(0.0, updated.packageTotalMB))
+            updated = updated.copy(remainingBalanceMB = clampReading(lineId, mb, updated))
         }
 
         if (daysRemaining != null && updated.planType == PREPAID_PLAN_TYPE) {
@@ -281,7 +301,7 @@ class DataForecastViewModel(
 
             _lastAutoReading.value = UssdAutoReading(
                 lineId = lineId,
-                remainingMB = mb?.let { it.coerceIn(0.0, updated.packageTotalMB) },
+                remainingMB = mb?.let { clampReading(lineId, it, updated) },
                 daysRemaining = daysRemaining,
                 newCycleDay = newCycleDay,
                 rawText = text.trim()
@@ -303,6 +323,8 @@ class DataForecastViewModel(
         val consultingLineId = simulations.third
         val plan1 = p1 ?: DataPlanEntity(id = 1, totalCycleDays = currentMonthTotalDays())
         val plan2 = p2 ?: DataPlanEntity(id = 2, totalCycleDays = 35, packageTotalMB = 6144.0, remainingBalanceMB = 6144.0, planType = PREPAID_PLAN_TYPE, operatorName = "Línea 2 (Prepago)")
+        // No hay paquete contratado: la referencia de consumo sale del historial.
+        val baselineMB2 = prepaidCycleBaselineMB(plan2, logs)
 
         // Line 1 calculation — the monthly cycle follows the CALENDAR month,
         // so its length automatically matches the real month (28/29/30/31
@@ -331,7 +353,7 @@ class DataForecastViewModel(
         val currentDay2 = daysFromPurchase
 
         val forecastLine2 = DataForecastCalculator.calculate(
-            packageTotalMB = plan2.packageTotalMB,
+            packageTotalMB = baselineMB2,
             remainingBalanceMB = plan2.remainingBalanceMB,
             totalCycleDays = totalDays2,
             daysElapsed = currentDay2,
@@ -397,12 +419,15 @@ class DataForecastViewModel(
     ) {
         viewModelScope.launch {
             val current = repository.getDataPlan(lineId).firstOrNull() ?: DataPlanEntity(id = lineId)
-            val safePackage = packageTotalMB.coerceAtLeast(100.0)
-            val safeRemaining = (remainingBalanceMB ?: current.remainingBalanceMB).coerceIn(0.0, safePackage)
-            val defaultDays = if (lineId == 2) 35 else 30
+            val isPrepaid = lineId == 2
+            val safePackage = if (isPrepaid) current.packageTotalMB else packageTotalMB.coerceAtLeast(100.0)
+            val rawRemaining = remainingBalanceMB ?: current.remainingBalanceMB
+            val safeRemaining = if (isPrepaid) rawRemaining.coerceAtLeast(0.0)
+                                else rawRemaining.coerceIn(0.0, safePackage)
+            val defaultDays = if (isPrepaid) 35 else 30
             val safeDays = (totalCycleDays ?: current.totalCycleDays.takeIf { it > 0 } ?: defaultDays).coerceAtLeast(1)
 
-            if (lineId == 2) {
+            if (isPrepaid) {
                 _customTotalDaysLine2.value = safeDays
             }
 
@@ -413,31 +438,32 @@ class DataForecastViewModel(
                 // month; only the prepaid line keeps a configurable length.
                 totalCycleDays = if (lineId == 1) currentMonthTotalDays() else safeDays,
                 operatorName = operatorName ?: current.operatorName,
-                planName = "Paquete ${DataFormatters.format(safePackage, current.displayUnit)}"
+                planName = if (isPrepaid) "Prepago ($safeDays días)"
+                           else "Paquete ${DataFormatters.format(safePackage, current.displayUnit)}"
             )
             repository.saveOrUpdatePlan(updated)
         }
     }
 
+    /**
+     * Registers a new prepaid cycle. The app does not ask for a package size or
+     * add balance by itself: the carrier is the source of truth, so the real
+     * balance must be recorded afterwards with a USSD/manual reading.
+     */
     fun registerNewPrepaidPurchase(
         lineId: Int = 2,
-        packageTotalMB: Double,
         totalDays: Int = 35,
         purchaseDateMillis: Long? = null,
         sourceNote: String = ""
     ) {
         viewModelScope.launch {
-            // Sensible empty state for a prepaid line: nothing accumulated
-            // yet, so a first purchase starts from a clean slate.
             val current = repository.getDataPlan(lineId).firstOrNull()
                 ?: DataPlanEntity(
                     id = lineId,
                     planType = PREPAID_PLAN_TYPE,
-                    packageTotalMB = 0.0,
                     remainingBalanceMB = 0.0,
                     totalCycleDays = totalDays
                 )
-            val safePackage = packageTotalMB.coerceAtLeast(100.0)
 
             // The purchase date defaults to today; when a past date is given,
             // the cycle starts on that day and elapsed days are accounted for.
@@ -446,37 +472,19 @@ class DataForecastViewModel(
             val cycleDay = (daysSincePurchase + 1).coerceIn(1, totalDays)
 
             // Day 35 is the deadline: if the old cycle already ran out, the
-            // leftover balance was forfeited and the new cycle starts fresh.
+            // leftover balance was forfeited and a new reading will set the
+            // fresh balance.
             val oldCycleDay = ((System.currentTimeMillis() - current.purchaseTimestamp) / DAY_MS).toInt() + 1
             val previousExpired = current.totalCycleDays > 0 && oldCycleDay > current.totalCycleDays
 
             _customTotalDaysLine2.value = totalDays
 
-            val updatedBase = if (previousExpired) {
-                current.copy(
-                    packageTotalMB = safePackage,
-                    remainingBalanceMB = safePackage,
-                    totalCycleDays = totalDays,
-                    customCurrentDay = cycleDay,
-                    purchaseTimestamp = purchaseTs,
-                    planName = "Paquete ${DataFormatters.format(safePackage, current.displayUnit)} ($totalDays días)"
-                )
-            } else {
-                // The purchased capacity is ADDED to whatever balance was
-                // left, and the package total grows by the same amount so
-                // the consumption history stays coherent.
-                current.copy(
-                    packageTotalMB = current.packageTotalMB + safePackage,
-                    remainingBalanceMB = current.remainingBalanceMB + safePackage,
-                    totalCycleDays = totalDays,
-                    customCurrentDay = cycleDay,
-                    purchaseTimestamp = purchaseTs,
-                    planName = "Paquete ${DataFormatters.format(current.packageTotalMB + safePackage, current.displayUnit)} ($totalDays días)"
-                )
-            }
-            // A new cycle invalidates the previous recharge date and forces a
-            // fresh *222*732# query on the next app start.
-            val updated = updatedBase.copy(
+            val updated = current.copy(
+                remainingBalanceMB = if (previousExpired) 0.0 else current.remainingBalanceMB,
+                totalCycleDays = totalDays,
+                customCurrentDay = cycleDay,
+                purchaseTimestamp = purchaseTs,
+                planName = "Prepago ($totalDays días)",
                 rechargeEligibleDateMs = null,
                 rechargeCheckedCycleStartMs = null
             )
@@ -485,8 +493,8 @@ class DataForecastViewModel(
                 lineId,
                 updated.remainingBalanceMB,
                 cycleDay,
-                "Compra nuevo paquete: ${DataFormatters.format(safePackage, current.displayUnit)}" +
-                    (if (previousExpired) " (el paquete anterior venció: el saldo restante se perdió)" else "") +
+                "Compra registrada: ciclo reiniciado a $totalDays días" +
+                    (if (previousExpired) " (saldo anterior vencido y perdido: consulta el nuevo saldo)" else "") +
                     (if (purchaseDateMillis != null) " (comprado el ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(purchaseDateMillis))})" else "") +
                     (if (sourceNote.isBlank()) "" else " ($sourceNote)")
             )
@@ -600,7 +608,7 @@ class DataForecastViewModel(
     fun recordUssdReading(lineId: Int, remainingMB: Double, note: String = "Lectura por USSD") {
         viewModelScope.launch {
             val current = repository.getDataPlan(lineId).firstOrNull() ?: return@launch
-            val safeMB = remainingMB.coerceIn(0.0, current.packageTotalMB)
+            val safeMB = clampReading(lineId, remainingMB, current)
             val day = displayedCycleDay(lineId, current)
             repository.saveOrUpdatePlan(current.copy(remainingBalanceMB = safeMB))
             repository.addLog(lineId, safeMB, day, note)
