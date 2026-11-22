@@ -41,9 +41,10 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   cuando ese SMS la confirma (también se puede pegar el SMS a mano). Si la API
   de telefonía no responde, la app pasa al marcador en esa misma SIM; el lector
   de accesibilidad ya no es necesario para comprar. Siempre queda la opción de
-  registrar la compra manualmente. La app **no pide ni guarda el tamaño del
-  paquete**: solo anota la fecha de compra (reinicia el ciclo de 35 días) y el
-  saldo real se registra después con **Consultar Saldo** o una lectura manual.
+  registrar la compra manualmente. La app **no guarda un tamaño de paquete**:
+  pide el **saldo recargado** (que ya sabe del menú de ETECSA), lo **suma al
+  saldo restante guardado** y reinicia el ciclo de 35 días. Al vencer, el saldo
+  anterior se pierde y la recarga arranca desde cero.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El
   código USSD por operador y la SIM de cada línea se configuran una vez; la app
@@ -76,7 +77,7 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   de las diferencias entre lecturas registradas cada día. En la línea prepaga
   ese historial también alimenta el pronóstico: la referencia es el mayor saldo
   registrado desde la compra, así que no hace falta configurar un tamaño de
-  paquete (la línea solo se recarga y el saldo lo informa el operador).
+  paquete (la línea solo acumula el saldo que se recarga).
 - **Gráfico de barras de consumo por día del ciclo** en la pantalla principal de
   cada línea: muestra en MB cuánto se consumió en cada día del ciclo; la última
   lectura de un día sirve como saldo inicial del día siguiente.

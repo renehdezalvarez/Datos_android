@@ -1,6 +1,9 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +17,7 @@ import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -33,20 +37,25 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 /**
- * Registers a new prepaid cycle. The app does not ask how many GB were bought:
- * the carrier reports the real balance, which is recorded afterwards with a
- * USSD or manual reading.
+ * Registers a new prepaid cycle. The app asks for the balance being recharged
+ * (not a "package size") and adds it to the saved balance; the cycle length
+ * and purchase date are reset as well.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NewPrepaidPurchaseDialog(
     currentRemainingMB: Double,
     displayUnit: String,
     previousBalanceLost: Boolean = false,
     onDismiss: () -> Unit,
-    onConfirm: (totalDays: Int, purchaseDateMillis: Long?) -> Unit
+    onConfirm: (rechargedMB: Double, totalDays: Int, purchaseDateMillis: Long?) -> Unit
 ) {
+    var rechargeGBText by remember {
+        mutableStateOf("")
+    }
     var daysText by remember { mutableStateOf("35") }
     var dateText by remember { mutableStateOf("") }
+    val presets = listOf(2.0, 4.0, 6.0, 8.0, 10.0, 15.0, 20.0, 30.0)
 
     val dateFormat = remember {
         java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).apply {
@@ -89,6 +98,12 @@ fun NewPrepaidPurchaseDialog(
         }
     }
 
+    val rechargedGB = rechargeGBText.toDoubleOrNull() ?: 0.0
+    // After the deadline the leftover balance is forfeited, so the recharge
+    // starts from zero instead of adding on top of it.
+    val resultingMB = if (previousBalanceLost) rechargedGB * 1024.0
+                      else currentRemainingMB + rechargedGB * 1024.0
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -102,15 +117,43 @@ fun NewPrepaidPurchaseDialog(
             Column {
                 Text(
                     text = if (previousBalanceLost) {
-                        "El paquete anterior venció y su saldo se perdió. Registra la compra para reiniciar el ciclo y después consulta el saldo para anotar tus megas disponibles."
+                        "El paquete anterior venció y su saldo se perdió. Registra el saldo recargado para empezar de cero:"
                     } else {
-                        "Registra que compraste un nuevo paquete para reiniciar el contador de 35 días. Después consulta el saldo: la app no suma megas por su cuenta, el operador es la fuente del saldo real."
+                        "Registra el saldo que recargaste. Se SUMA al saldo guardado y se reinicia el contador de 35 días:"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = rechargeGBText,
+                    onValueChange = { rechargeGBText = it },
+                    label = { Text("Saldo recargado (GB)") },
+                    placeholder = { Text("Ej. 6") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("new_purchase_gb_input")
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presets.forEach { gbVal ->
+                        val presetStr = gbVal.toInt().toString()
+                        FilterChip(
+                            selected = rechargeGBText == presetStr,
+                            onClick = { rechargeGBText = presetStr },
+                            label = { Text("${gbVal.toInt()} GB", style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
                     value = daysText,
@@ -141,36 +184,55 @@ fun NewPrepaidPurchaseDialog(
                     modifier = Modifier.fillMaxWidth().testTag("new_purchase_date_input")
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = if (previousBalanceLost) {
-                            "Saldo anterior perdido al vencer: ${DataFormatters.format(currentRemainingMB, displayUnit)}"
-                        } else {
-                            "Saldo registrado hasta ahora: ${DataFormatters.format(currentRemainingMB, displayUnit)} (se actualizará al consultar)"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
+                if (rechargedGB > 0.0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            if (previousBalanceLost) {
+                                Text(
+                                    text = "Saldo anterior: ${DataFormatters.format(currentRemainingMB, displayUnit)} (perdido al vencer)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            } else {
+                                Text(
+                                    text = "Saldo guardado: ${DataFormatters.format(currentRemainingMB, displayUnit)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            Text(
+                                text = "+ Saldo recargado: ${DataFormatters.format(rechargedGB * 1024.0, displayUnit)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "= Saldo resultante: ${DataFormatters.format(resultingMB, displayUnit)}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
+                    val gb = rechargeGBText.toDoubleOrNull() ?: 0.0
                     val days = daysText.toIntOrNull() ?: 35
-                    onConfirm(days.coerceAtLeast(1), parsedDate.first)
+                    onConfirm(gb * 1024.0, days.coerceAtLeast(1), parsedDate.first)
                     onDismiss()
                 },
-                enabled = (daysText.toIntOrNull() ?: 0) > 0 && parsedDate.second == null,
+                enabled = rechargedGB > 0.0 && (daysText.toIntOrNull() ?: 0) > 0 && parsedDate.second == null,
                 modifier = Modifier.testTag("confirm_new_purchase_button")
             ) {
-                Text("Registrar Compra")
+                Text("Activar Paquete")
             }
         },
         dismissButton = {

@@ -446,12 +446,13 @@ class DataForecastViewModel(
     }
 
     /**
-     * Registers a new prepaid cycle. The app does not ask for a package size or
-     * add balance by itself: the carrier is the source of truth, so the real
-     * balance must be recorded afterwards with a USSD/manual reading.
+     * Registers a new prepaid cycle and adds the recharged balance to the
+     * saved one (or starts fresh when the previous cycle expired). No package
+     * total is stored: consumption keeps coming from the reading history.
      */
     fun registerNewPrepaidPurchase(
         lineId: Int = 2,
+        rechargedMB: Double,
         totalDays: Int = 35,
         purchaseDateMillis: Long? = null,
         sourceNote: String = ""
@@ -479,8 +480,11 @@ class DataForecastViewModel(
 
             _customTotalDaysLine2.value = totalDays
 
+            val safeRecharge = rechargedMB.coerceAtLeast(0.0)
+            val newBalance = if (previousExpired) safeRecharge
+                             else current.remainingBalanceMB + safeRecharge
             val updated = current.copy(
-                remainingBalanceMB = if (previousExpired) 0.0 else current.remainingBalanceMB,
+                remainingBalanceMB = newBalance,
                 totalCycleDays = totalDays,
                 customCurrentDay = cycleDay,
                 purchaseTimestamp = purchaseTs,
@@ -493,8 +497,8 @@ class DataForecastViewModel(
                 lineId,
                 updated.remainingBalanceMB,
                 cycleDay,
-                "Compra registrada: ciclo reiniciado a $totalDays días" +
-                    (if (previousExpired) " (saldo anterior vencido y perdido: consulta el nuevo saldo)" else "") +
+                "Recarga registrada: +${DataFormatters.format(safeRecharge, current.displayUnit)} · ciclo reiniciado a $totalDays días" +
+                    (if (previousExpired) " (saldo anterior vencido y perdido)" else "") +
                     (if (purchaseDateMillis != null) " (comprado el ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(purchaseDateMillis))})" else "") +
                     (if (sourceNote.isBlank()) "" else " ($sourceNote)")
             )

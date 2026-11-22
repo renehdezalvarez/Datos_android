@@ -638,16 +638,20 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
 
         if (showUssdPurchaseDialog) {
             UssdPurchaseDialog(
+                displayUnit = state.line2.displayUnit,
                 selectedSimSlot = state.line2.plan.simSlotIndex,
+                currentRemainingMB = state.line2.plan.remainingBalanceMB,
+                previousBalanceLost = state.line2.forecast.daysRemaining <= 0,
                 onDismiss = { showUssdPurchaseDialog = false },
                 onOpenManual = {
                     showUssdPurchaseDialog = false
                     targetLineId = 2
                     showNewPurchaseDialog = true
                 },
-                onPurchaseConfirmed = { totalDays, rawText ->
+                onPurchaseConfirmed = { rechargedMB, totalDays, rawText ->
                     viewModel.registerNewPrepaidPurchase(
                         lineId = 2,
+                        rechargedMB = rechargedMB,
                         totalDays = totalDays,
                         sourceNote = "Compra por USSD: ${rawText.replace('\n', ' ').take(120)}"
                     )
@@ -663,8 +667,8 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                 displayUnit = state.line2.displayUnit,
                 previousBalanceLost = state.line2.forecast.daysRemaining <= 0,
                 onDismiss = { showNewPurchaseDialog = false },
-                onConfirm = { totalDays, purchaseDateMillis ->
-                    viewModel.registerNewPrepaidPurchase(2, totalDays, purchaseDateMillis)
+                onConfirm = { rechargedMB, totalDays, purchaseDateMillis ->
+                    viewModel.registerNewPrepaidPurchase(2, rechargedMB, totalDays, purchaseDateMillis)
                     RechargeReminderWorker.cancel(context)
                     showNewPurchaseDialog = false
                 }

@@ -77,10 +77,13 @@ private data class ActivePurchaseRequest(
  */
 @Composable
 fun UssdPurchaseDialog(
+    displayUnit: String,
     selectedSimSlot: Int?,
+    currentRemainingMB: Double,
+    previousBalanceLost: Boolean = false,
     onDismiss: () -> Unit,
     onOpenManual: () -> Unit,
-    onPurchaseConfirmed: (totalDays: Int, rawText: String) -> Unit
+    onPurchaseConfirmed: (rechargedMB: Double, totalDays: Int, rawText: String) -> Unit
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -99,6 +102,7 @@ fun UssdPurchaseDialog(
     var assistedNoticeShown by remember { mutableStateOf(false) }
 
     var manualOptionText by remember { mutableStateOf("") }
+    var sizeText by remember { mutableStateOf("") }
     var daysText by remember { mutableStateOf("35") }
     var smsText by remember { mutableStateOf("") }
     var ussdAckText by remember { mutableStateOf("") }
@@ -174,11 +178,24 @@ fun UssdPurchaseDialog(
             step = PurchaseStep.Failure(result.message, text)
             return
         }
+        val optionNumber = manualOptionText.toIntOrNull() ?: 0
+        // The editable field is authoritative: it is what the user reviewed in
+        // the confirmation step. The parser/menu values are only fallbacks.
+        val gb = sizeText.toDoubleOrNull()
+            ?: result.sizeGB
+            ?: menuOptions.firstOrNull { it.number == optionNumber }?.sizeGB
         val days = result.days ?: daysText.toIntOrNull()?.takeIf { it > 0 } ?: 35
+        if (gb == null || gb <= 0.0) {
+            step = PurchaseStep.Failure(
+                "La compra se confirmó pero no se supo cuánto saldo recargó. Regístralo manualmente.",
+                text
+            )
+            return
+        }
         step = PurchaseStep.Success(
             PackageOption(
-                number = manualOptionText.toIntOrNull() ?: 0,
-                sizeGB = result.sizeGB,
+                number = optionNumber,
+                sizeGB = gb,
                 days = days,
                 price = result.price,
                 rawLine = text.trim()
@@ -205,6 +222,7 @@ fun UssdPurchaseDialog(
     }
 
     fun selectOption(option: PackageOption) {
+        sizeText = option.sizeGB?.toString() ?: ""
         daysText = option.days?.toString() ?: "35"
         manualOptionText = option.number.toString()
         step = PurchaseStep.Confirming(option)
@@ -222,6 +240,11 @@ fun UssdPurchaseDialog(
     }
 
     fun startPurchase(option: PackageOption) {
+        val gb = sizeText.toDoubleOrNull()
+        if (gb == null || gb <= 0.0) {
+            Toast.makeText(context, "Indica el saldo recargado en GB.", Toast.LENGTH_SHORT).show()
+            return
+        }
         // Disable the button while permissions are being requested.
         step = PurchaseStep.Purchasing
         assistedNoticeShown = false
@@ -266,8 +289,9 @@ fun UssdPurchaseDialog(
     }
 
     fun finishPurchase(success: PurchaseStep.Success) {
+        val gb = sizeText.toDoubleOrNull() ?: success.option.sizeGB ?: return
         val days = success.option.days ?: 35
-        onPurchaseConfirmed(days, success.raw)
+        onPurchaseConfirmed(gb * 1024.0, days, success.raw)
         onDismiss()
     }
 
@@ -356,16 +380,30 @@ fun UssdPurchaseDialog(
                         Text("Revisa la compra antes de continuar:", fontWeight = FontWeight.Bold)
                         Text(current.option.rawLine)
                         OutlinedTextField(
+                            value = sizeText,
+                            onValueChange = { sizeText = it },
+                            label = { Text("Saldo recargado (GB)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
                             value = daysText,
                             onValueChange = { daysText = it },
                             label = { Text("Días de vigencia") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Text(
-                            text = "Después consulta el saldo para registrar tus megas disponibles: la app no suma datos por su cuenta.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        val gb = sizeText.toDoubleOrNull() ?: 0.0
+                        if (gb > 0.0) {
+                            val resultingMB = if (previousBalanceLost) gb * 1024.0
+                                              else currentRemainingMB + gb * 1024.0
+                            Text(
+                                text = (if (previousBalanceLost) "Saldo vencido perdido. " else "") +
+                                    "Saldo resultante estimado: " +
+                                    DataFormatters.format(resultingMB, displayUnit),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                         Text(
                             text = "Se marcará ${PrepaidPurchase.confirmationCode(current.option.number)}. " +
                                 "Ese código ya incluye la aceptación de la compra; después llega el SMS.",
@@ -430,7 +468,10 @@ fun UssdPurchaseDialog(
                             Text("Compra confirmada", fontWeight = FontWeight.Bold)
                         }
                         Text(
-                            text = "${current.option.days ?: 35} días de vigencia",
+                            text = DataFormatters.format(
+                                (current.option.sizeGB ?: 0.0) * 1024.0,
+                                displayUnit
+                            ) + " recargados · ${current.option.days ?: 35} días",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
