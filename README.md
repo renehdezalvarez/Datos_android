@@ -42,9 +42,10 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
   de telefonía no responde, la app pasa al marcador en esa misma SIM; el lector
   de accesibilidad ya no es necesario para comprar. Siempre queda la opción de
   registrar la compra manualmente. La app **no guarda un tamaño de paquete**:
-  pide el **saldo recargado** (que ya sabe del menú de ETECSA), lo **suma al
-  saldo restante guardado** y reinicia el ciclo de 35 días. Al vencer, el saldo
-  anterior se pierde y la recarga arranca desde cero.
+  pide el **saldo recargado** —lo toma del SMS de confirmación cuando lo trae,
+  o del menú de ETECSA—, lo **suma al saldo restante guardado** y reinicia el
+  ciclo de 35 días. Al vencer, el saldo anterior se pierde y la recarga arranca
+  desde cero.
 - **Lecturas USSD automáticas**: el botón **Consultar Saldo** de cada línea
   consulta el operador y actualiza el saldo sin abrir ningún formulario. El
   código USSD por operador y la SIM de cada línea se configuran una vez; la app

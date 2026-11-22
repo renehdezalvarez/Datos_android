@@ -103,6 +103,7 @@ fun UssdPurchaseDialog(
 
     var manualOptionText by remember { mutableStateOf("") }
     var sizeText by remember { mutableStateOf("") }
+    var sizeFromSms by remember { mutableStateOf(false) }
     var daysText by remember { mutableStateOf("35") }
     var smsText by remember { mutableStateOf("") }
     var ussdAckText by remember { mutableStateOf("") }
@@ -179,11 +180,14 @@ fun UssdPurchaseDialog(
             return
         }
         val optionNumber = manualOptionText.toIntOrNull() ?: 0
-        // The editable field is authoritative: it is what the user reviewed in
-        // the confirmation step. The parser/menu values are only fallbacks.
-        val gb = sizeText.toDoubleOrNull()
-            ?: result.sizeGB
+        // The carrier's confirmation SMS is the source of truth for what was
+        // actually purchased; the menu and the editable field are fallbacks.
+        val smsGB = result.sizeGB?.takeIf { it > 0.0 }
+        val gb = smsGB
+            ?: sizeText.toDoubleOrNull()
             ?: menuOptions.firstOrNull { it.number == optionNumber }?.sizeGB
+        sizeFromSms = smsGB != null
+        if (smsGB != null) sizeText = smsGB.toString()
         val days = result.days ?: daysText.toIntOrNull()?.takeIf { it > 0 } ?: 35
         if (gb == null || gb <= 0.0) {
             step = PurchaseStep.Failure(
@@ -223,6 +227,7 @@ fun UssdPurchaseDialog(
 
     fun selectOption(option: PackageOption) {
         sizeText = option.sizeGB?.toString() ?: ""
+        sizeFromSms = false
         daysText = option.days?.toString() ?: "35"
         manualOptionText = option.number.toString()
         step = PurchaseStep.Confirming(option)
@@ -471,7 +476,8 @@ fun UssdPurchaseDialog(
                             text = DataFormatters.format(
                                 (current.option.sizeGB ?: 0.0) * 1024.0,
                                 displayUnit
-                            ) + " recargados · ${current.option.days ?: 35} días",
+                            ) + " recargados" + (if (sizeFromSms) " (según SMS)" else "") +
+                                " · ${current.option.days ?: 35} días",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
