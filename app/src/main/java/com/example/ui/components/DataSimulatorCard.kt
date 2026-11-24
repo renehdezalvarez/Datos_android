@@ -188,7 +188,7 @@ fun DataSimulatorCard(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (willReachEnd) "¡Con este ritmo SÍ te alcanza!" else "NO te alcanzará para el mes",
+                                text = if (willReachEnd) "¡Con este ritmo SÍ te alcanza!" else "NO te alcanzará el ciclo",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = if (willReachEnd) StatusSuccess else StatusDanger
@@ -209,7 +209,7 @@ fun DataSimulatorCard(
                         text = if (willReachEnd) {
                             "Al terminar los ${forecast.daysRemaining.coerceAtLeast(0)} días restantes, te sobrarán aprox. ${DataFormatters.format(simEndBalance, displayUnit)}."
                         } else {
-                            "Te faltarán aprox. ${DataFormatters.format(kotlin.math.abs(simEndBalance), displayUnit)} antes de que cierre el ciclo mensual."
+                            "Te faltarán aprox. ${DataFormatters.format(kotlin.math.abs(simEndBalance), displayUnit)} antes de que cierre el ciclo."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

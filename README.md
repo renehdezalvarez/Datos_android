@@ -114,9 +114,9 @@ según tu saldo restante, los días transcurridos y tu ritmo de consumo.
    código Guardado (por defecto, Línea 1 `*111#` y Línea 2 `*222*328#`). Si tu
    operador usa otro, cámbialo y guárdalo. La consulta de fecha de recarga de la
    línea prepaga usa siempre `*222*732#`.
-3. **SIM de cada línea**: en **Ajustes**, usa el selector **SIM de la línea** de
-   cada tarjeta y elige el slot donde está esa línea (0 = primera SIM, 1 =
-   segunda). En un teléfono de una sola SIM puedes dejar la opción
+3. **SIM de cada línea**: en **Ajustes → Lectura USSD**, abre la línea y usa
+   **SIM de esta línea** para elegir el slot donde está esa línea (0 = primera
+   SIM, 1 = segunda). En un teléfono de una sola SIM puedes dejar la opción
    predeterminada del sistema.
 4. **Lector de respuestas USSD (respaldo)**: algunos operadores desactivan la
    API oficial de telefonía (`sendUssdRequest`). Actívalo en **Ajustes del

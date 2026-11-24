@@ -60,8 +60,7 @@ import com.example.data.model.DataBalanceLogEntity
 import com.example.data.model.DataPlanEntity
 import com.example.data.repository.DataPlanRepository
 import com.example.ui.components.AddBalanceLogDialog
-import com.example.ui.components.AdjustCycleDaysDialog
-import com.example.ui.components.ConfigurePackageDialog
+import com.example.ui.components.EditLineDialog
 import com.example.ui.components.NewPrepaidPurchaseDialog
 import com.example.ui.components.UssdPurchaseDialog
 import com.example.ui.components.UssdReadingDialog
@@ -207,8 +206,7 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var targetLineId by rememberSaveable { mutableIntStateOf(1) }
 
-    var showConfigurePackageDialog by remember { mutableStateOf(false) }
-    var showAdjustDaysDialog by remember { mutableStateOf(false) }
+    var showEditLineDialog by remember { mutableStateOf(false) }
     var showAddLogDialog by remember { mutableStateOf(false) }
     var showNewPurchaseDialog by remember { mutableStateOf(false) }
     var showUssdPurchaseDialog by remember { mutableStateOf(false) }
@@ -522,15 +520,6 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                     logs = state.logs,
                     onConsultBalance = { line1Consult.start() },
                     consultingBalance = state.consultingLineId == 1,
-                    onOpenConfigurePackage = {
-                        targetLineId = 1
-                        showConfigurePackageDialog = true
-                    },
-                    onOpenAdjustDays = {
-                        targetLineId = 1
-                        showAdjustDaysDialog = true
-                    },
-                    onToggleDisplayUnit = { viewModel.toggleDisplayUnit(1) },
                     onSimulateDailyMB = { viewModel.setSimulatedDailyMB(1, it) }
                 )
                 1 -> Prepaid35LineScreen(
@@ -540,19 +529,10 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                     consultingBalance = state.consultingLineId == 2,
                     onConsultRechargeDate = { rechargeConsult.start() },
                     consultingRechargeDate = state.consultingLineId == 2,
-                    onOpenConfigurePackage = {
-                        targetLineId = 2
-                        showConfigurePackageDialog = true
-                    },
-                    onOpenAdjustDays = {
-                        targetLineId = 2
-                        showAdjustDaysDialog = true
-                    },
-                    onOpenNewPurchaseDialog = {
+                    onOpenPurchase = {
                         targetLineId = 2
                         showUssdPurchaseDialog = true
                     },
-                    onToggleDisplayUnit = { viewModel.toggleDisplayUnit(2) },
                     onSimulateDailyMB = { viewModel.setSimulatedDailyMB(2, it) }
                 )
                 2 -> DataLogsScreen(
@@ -565,19 +545,15 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                 )
                 3 -> DataSettingsScreen(
                     state = state,
-                    onOpenConfigurePackage = { lineId ->
+                    onOpenEditLine = { lineId ->
                         targetLineId = lineId
-                        showConfigurePackageDialog = true
+                        showEditLineDialog = true
                     },
                     onOpenUssdReading = { lineId ->
                         targetLineId = lineId
                         showUssdReadingDialog = true
                     },
-                    onSelectSim = { lineId, simSlotIndex ->
-                        viewModel.updateSimSlot(lineId, simSlotIndex)
-                    },
                     onToggleUnit = { lineId -> viewModel.toggleDisplayUnit(lineId) },
-                    onResetToCalendar = { lineId -> viewModel.resetToRealCalendar(lineId) },
                     updateState = updateState,
                     onCheckUpdates = { scope.launch { updateManager.check(force = true) } },
                     onDownloadUpdate = { updateManager.download() },
@@ -604,34 +580,24 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
         val currentDialogLine = if (targetLineId == 1) state.line1 else state.line2
 
         // Dialogs
-        if (showConfigurePackageDialog) {
-            ConfigurePackageDialog(
+        if (showEditLineDialog) {
+            EditLineDialog(
+                lineId = targetLineId,
                 currentPackageTotalMB = currentDialogLine.plan.packageTotalMB,
                 currentRemainingMB = currentDialogLine.plan.remainingBalanceMB,
-                currentTotalDays = currentDialogLine.plan.totalCycleDays,
-                displayUnit = currentDialogLine.displayUnit,
-                monthlyCalendarCycle = targetLineId == 1,
-                showPackageSize = targetLineId != 2,
-                onDismiss = { showConfigurePackageDialog = false },
-                onConfirm = { packageMB, remainingMB, totalDays ->
-                    viewModel.updatePackageConfiguration(targetLineId, packageMB, remainingMB, totalDays)
-                    showConfigurePackageDialog = false
-                }
-            )
-        }
-
-        if (showAdjustDaysDialog) {
-            AdjustCycleDaysDialog(
                 currentDay = currentDialogLine.forecast.daysElapsed,
-                totalCycleDays = currentDialogLine.forecast.totalCycleDays,
-                monthlyCalendarCycle = targetLineId == 1,
-                onDismiss = { showAdjustDaysDialog = false },
-                onConfirm = { cd, td ->
-                    viewModel.updateDays(targetLineId, cd, td)
-                    showAdjustDaysDialog = false
+                totalCycleDays = currentDialogLine.plan.totalCycleDays,
+                displayUnit = currentDialogLine.displayUnit,
+                onDismiss = { showEditLineDialog = false },
+                onConfirm = { packageMB, remainingMB, currentDay, totalDays ->
+                    viewModel.updateLineConfiguration(
+                        targetLineId, packageMB, remainingMB, currentDay, totalDays
+                    )
+                    showEditLineDialog = false
                 },
                 onResetCalendar = {
                     viewModel.resetToRealCalendar(targetLineId)
+                    showEditLineDialog = false
                 }
             )
         }

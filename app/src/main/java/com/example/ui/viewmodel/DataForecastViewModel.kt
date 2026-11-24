@@ -446,6 +446,61 @@ class DataForecastViewModel(
     }
 
     /**
+     * Actualiza saldo, paquete/ciclo y opcionalmente el día actual en una sola
+     * escritura. Si [currentDay] es null, el ancla del ciclo no se toca: así
+     * editar solo el saldo no reancla la línea prepaga.
+     */
+    fun updateLineConfiguration(
+        lineId: Int,
+        packageTotalMB: Double,
+        remainingBalanceMB: Double,
+        currentDay: Int?,
+        totalCycleDays: Int
+    ) {
+        viewModelScope.launch {
+            val current = repository.getDataPlan(lineId).firstOrNull() ?: DataPlanEntity(id = lineId)
+            val isPrepaid = lineId == 2
+            val safePackage = if (isPrepaid) current.packageTotalMB else packageTotalMB.coerceAtLeast(100.0)
+            val safeRemaining = if (isPrepaid) remainingBalanceMB.coerceAtLeast(0.0)
+                else remainingBalanceMB.coerceIn(0.0, safePackage)
+            val defaultDays = if (isPrepaid) 35 else currentMonthTotalDays()
+            val safeDays = (if (lineId == 1) currentMonthTotalDays() else totalCycleDays)
+                .takeIf { it > 0 } ?: defaultDays
+
+            if (isPrepaid) {
+                _customTotalDaysLine2.value = safeDays
+            }
+
+            var updated = current.copy(
+                packageTotalMB = safePackage,
+                remainingBalanceMB = safeRemaining,
+                totalCycleDays = safeDays,
+                planName = if (isPrepaid) "Prepago ($safeDays días)"
+                    else "Paquete ${DataFormatters.format(safePackage, current.displayUnit)}"
+            )
+
+            if (currentDay != null) {
+                val boundedDay = currentDay.coerceIn(1, safeDays)
+                val newPurchaseTimestamp = System.currentTimeMillis() - (boundedDay - 1) * DAY_MS
+                updated = updated.copy(
+                    customCurrentDay = boundedDay,
+                    purchaseTimestamp = newPurchaseTimestamp,
+                    rechargeCheckedCycleStartMs = if (isPrepaid) {
+                        PrepaidRecharge.reanchoredCheckedCycleStart(
+                            current.rechargeCheckedCycleStartMs,
+                            newPurchaseTimestamp
+                        )
+                    } else {
+                        current.rechargeCheckedCycleStartMs
+                    }
+                )
+            }
+
+            repository.saveOrUpdatePlan(updated)
+        }
+    }
+
+    /**
      * Registers a new prepaid cycle and adds the recharged balance to the
      * saved one (or starts fresh when the previous cycle expired). No package
      * total is stored: consumption keeps coming from the reading history.

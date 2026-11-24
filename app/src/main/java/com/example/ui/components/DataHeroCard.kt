@@ -277,7 +277,7 @@ fun DataHeroCard(
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = if (willLast) "Sobrante estimado al fin" else "Déficit al fin de mes",
+                                    text = if (willLast) "Sobrante estimado al fin" else "Déficit al final del ciclo",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -312,7 +312,7 @@ fun DataHeroCard(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "A este ritmo, tus datos se agotarán cerca del día ${forecast.exhaustionCycleDay} del mes.",
+                                    text = "A este ritmo, tus datos se agotarán cerca del día ${forecast.exhaustionCycleDay} del ciclo.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = StatusDanger,
                                     fontWeight = FontWeight.SemiBold

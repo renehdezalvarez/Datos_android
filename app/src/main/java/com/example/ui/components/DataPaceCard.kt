@@ -212,7 +212,7 @@ fun DataPaceCard(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Para cubrir el mes",
+                            text = "Para cubrir el ciclo",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
@@ -229,7 +229,7 @@ fun DataPaceCard(
             val adviceText = if (forecast.willLastWholeMonth) {
                 "Excelente control: Tu ritmo actual está por debajo de tu cuota diaria máxima. Te alcanzará cómodamente para todo el ciclo."
             } else {
-                "Atención: Tu ritmo actual supera en un $ratio% la cuota segura diaria. Reduce tu consumo a ${DataFormatters.format(forecast.safeDailyAllowanceMB)}/día para llegar a fin de mes."
+                "Atención: Tu ritmo actual supera en un $ratio% la cuota segura diaria. Reduce tu consumo a ${DataFormatters.format(forecast.safeDailyAllowanceMB)}/día para llegar al final del ciclo."
             }
 
             Surface(
