@@ -128,7 +128,7 @@ fun EditLineDialog(
                     )
                 }
 
-                if (!showPackageSize) {
+                if (showPackageSize) {
                     OutlinedTextField(
                         value = sizeText,
                         onValueChange = { sizeText = it },
