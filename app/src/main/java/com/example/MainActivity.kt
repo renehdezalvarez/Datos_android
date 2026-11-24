@@ -554,6 +554,12 @@ fun MainDataContent(viewModel: DataForecastViewModel, updateManager: UpdateManag
                         showUssdReadingDialog = true
                     },
                     onToggleUnit = { lineId -> viewModel.toggleDisplayUnit(lineId) },
+                    onOpenPrepaidPurchase = {
+                        targetLineId = 2
+                        showUssdPurchaseDialog = true
+                    },
+                    onConsultPrepaidRecharge = { rechargeConsult.start() },
+                    consultingPrepaidRecharge = state.consultingLineId == 2,
                     updateState = updateState,
                     onCheckUpdates = { scope.launch { updateManager.check(force = true) } },
                     onDownloadUpdate = { updateManager.download() },

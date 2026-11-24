@@ -47,6 +47,9 @@ fun DataSettingsScreen(
     onOpenEditLine: (lineId: Int) -> Unit,
     onOpenUssdReading: (lineId: Int) -> Unit,
     onToggleUnit: (lineId: Int) -> Unit,
+    onOpenPrepaidPurchase: () -> Unit,
+    onConsultPrepaidRecharge: () -> Unit,
+    consultingPrepaidRecharge: Boolean,
     updateState: UpdateUiState,
     onCheckUpdates: () -> Unit,
     onDownloadUpdate: () -> Unit,
@@ -113,7 +116,37 @@ fun DataSettingsScreen(
                     displayUnit = state.line2.displayUnit,
                     onEdit = { onOpenEditLine(2) },
                     onUssd = { onOpenUssdReading(2) },
-                    onToggleUnit = { onToggleUnit(2) }
+                    onToggleUnit = { onToggleUnit(2) },
+                    extraActions = {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onOpenPrepaidPurchase,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Comprar paquete", style = MaterialTheme.typography.labelMedium)
+                            }
+                            OutlinedButton(
+                                onClick = onConsultPrepaidRecharge,
+                                enabled = !consultingPrepaidRecharge,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (consultingPrepaidRecharge) {
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text("Consultar recarga", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
                 )
             }
 
@@ -189,7 +222,8 @@ private fun LineSettingsCard(
     displayUnit: String,
     onEdit: () -> Unit,
     onUssd: () -> Unit,
-    onToggleUnit: () -> Unit
+    onToggleUnit: () -> Unit,
+    extraActions: @Composable (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -253,6 +287,8 @@ private fun LineSettingsCard(
                     Text("Lectura USSD")
                 }
             }
+
+            extraActions?.invoke()
         }
     }
 }

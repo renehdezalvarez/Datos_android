@@ -104,7 +104,10 @@ fun Prepaid35LineScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             val daysLeft = forecast.daysRemaining
-            if (daysLeft <= 5) {
+            val lowBalance = forecast.remainingBalanceMB < 1024.0
+            val showPurchasePanel = daysLeft <= 5 || lowBalance
+            if (showPurchasePanel) {
+                val urgent = daysLeft <= 5
                 item {
                     Card(
                         modifier = Modifier
@@ -112,7 +115,11 @@ fun Prepaid35LineScreen(
                             .testTag("prepaid_expiration_warning"),
                         shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
+                            containerColor = if (urgent) {
+                                MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                            }
                         )
                     ) {
                         Row(
@@ -122,9 +129,13 @@ fun Prepaid35LineScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Warning,
+                                imageVector = if (urgent) Icons.Default.Warning else Icons.Default.Autorenew,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                tint = if (urgent) {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                },
                                 modifier = Modifier.size(28.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -132,20 +143,30 @@ fun Prepaid35LineScreen(
                                 Text(
                                     text = when {
                                         daysLeft <= 0 -> "El paquete ha vencido"
-                                        else -> "¡Quedan $daysLeft ${if (daysLeft == 1) "día" else "días"} del paquete!"
+                                        daysLeft <= 5 -> "¡Quedan $daysLeft ${if (daysLeft == 1) "día" else "días"} del paquete!"
+                                        else -> "Te queda poco saldo"
                                     },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                    color = if (urgent) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    }
                                 )
                                 Text(
                                     text = when {
                                         daysLeft <= 0 -> "El saldo restante se perdió. Compra un nuevo paquete para recuperar tus datos."
                                         daysLeft == 1 -> "Último día: al terminar hoy el saldo restante se pierde. Compra para conservarlo."
-                                        else -> "El día ${forecast.totalCycleDays} es la fecha límite: el saldo que quede al vencer se pierde. Compra antes para conservarlo."
+                                        daysLeft <= 5 -> "El día ${forecast.totalCycleDays} es la fecha límite: el saldo que quede al vencer se pierde. Compra antes para conservarlo."
+                                        else -> "Te queda menos de 1 GB. Puedes comprar un nuevo paquete y sumar saldo antes de que se agote."
                                     },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                    color = if (urgent) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f)
+                                    }
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
@@ -161,113 +182,66 @@ fun Prepaid35LineScreen(
                 }
             }
 
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("prepaid_recharge_card"),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Event,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Recarga de saldo",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (lineState.rechargeEligibleDateFormatted.isNotBlank()) {
-                                Text(
-                                    text = "Puedes recargar desde el ${lineState.rechargeEligibleDateFormatted}.",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Text(
-                                    text = "Fecha informada por el operador: ${lineState.rechargeCarrierDateFormatted}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                Text(
-                                    text = "Consulta ${PrepaidRecharge.USSD_CODE} una vez por ciclo para saber cuándo puedes recargar.",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        OutlinedButton(
-                            onClick = onConsultRechargeDate,
-                            enabled = !consultingRechargeDate,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.testTag("prepaid_recharge_consult_button")
-                        ) {
-                            if (consultingRechargeDate) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text("Consultar", style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (daysLeft > 5) {
+            val rechargeEligibleMs = lineState.rechargeEligibleDateMs
+            val showRechargePanel = rechargeEligibleMs != null &&
+                System.currentTimeMillis() >= rechargeEligibleMs - 3L * 24L * 60L * 60L * 1000L
+            if (showRechargePanel) {
                 item {
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("prepaid_recharge_card"),
                         shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                         )
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.Event,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "¿Compraste un nuevo paquete?",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    text = "Recarga de saldo",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Registra una nueva compra para reiniciar el contador de 35 días",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                    text = "Puedes recargar desde el ${lineState.rechargeEligibleDateFormatted}.",
+                                    style = MaterialTheme.typography.bodySmall
                                 )
+                                if (lineState.rechargeCarrierDateFormatted.isNotBlank()) {
+                                    Text(
+                                        text = "Fecha informada por el operador: ${lineState.rechargeCarrierDateFormatted}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-
                             Spacer(modifier = Modifier.width(8.dp))
-
-                            Button(
-                                onClick = onOpenPurchase,
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.testTag("button_new_prepaid_purchase")
+                            OutlinedButton(
+                                onClick = onConsultRechargeDate,
+                                enabled = !consultingRechargeDate,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("prepaid_recharge_consult_button")
                             ) {
-                                Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Nueva Compra", style = MaterialTheme.typography.labelSmall)
+                                if (consultingRechargeDate) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text("Consultar", style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                     }

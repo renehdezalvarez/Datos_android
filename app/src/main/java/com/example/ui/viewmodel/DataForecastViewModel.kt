@@ -31,7 +31,9 @@ data class SingleLineState(
     /** Prepaid only: first day the operator allows a balance recharge. */
     val rechargeEligibleDateFormatted: String = "",
     /** Date reported by the carrier (the day before [rechargeEligibleDateFormatted]). */
-    val rechargeCarrierDateFormatted: String = ""
+    val rechargeCarrierDateFormatted: String = "",
+    /** Prepaid only: raw eligible date for visibility rules. */
+    val rechargeEligibleDateMs: Long? = null
 )
 
 /** Result of an automatically interpreted USSD response. */
@@ -396,7 +398,8 @@ class DataForecastViewModel(
                 simulatedDailyMB = sim2,
                 expirationDateFormatted = expirationFormatted,
                 rechargeEligibleDateFormatted = rechargeEligibleFormatted,
-                rechargeCarrierDateFormatted = rechargeCarrierFormatted
+                rechargeCarrierDateFormatted = rechargeCarrierFormatted,
+                rechargeEligibleDateMs = plan2.rechargeEligibleDateMs
             ),
             logs = logs,
             calendarCurrentDay = currentDayOfMonth(),
